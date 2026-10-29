@@ -1,6 +1,6 @@
 # Architecture and interface decisions
 
-Status: solution structure and build/test configuration implemented in phase 1; runtime design below remains proposed. Consult [STATUS.md](STATUS.md) for what actually exists.
+Status: phase 1 scaffold and phase 2 contracts, validation, query encoding, and mappings are implemented. Authentication, HTTP clients, tools, and hosting below remain proposed. Consult [STATUS.md](STATUS.md) for evidence and [tool-contracts.md](../tool-contracts.md) for the exact implemented contracts.
 
 ## Solution layout
 
@@ -16,7 +16,7 @@ AGENTS.md
 e-boekhouden-api-v1.yaml
 docs/
   development/                 # Existing plan, prompts, decisions, handoff
-  tool-contracts.md            # Created in phase 2
+  tool-contracts.md            # Exact phase 2 contract and field reference
 src/
   EBoekhouden.Api/
     EBoekhouden.Api.csproj
@@ -84,7 +84,7 @@ Pin verified stable versions in `Directory.Packages.props`, SDK in `global.json`
 
 Version-specific SDK verification: [v2.3.0 getting started](https://github.com/modelcontextprotocol/csharp-sdk/blob/v2.3.0/docs/concepts/getting-started.md) documents `AddMcpServer`, `WithStdioServerTransport`, and stderr console logging. These APIs are guidance for phase 5, not implemented behavior. Explicit approved tool registration still requires version-specific verification when implemented.
 
-Runner guidance: [xUnit VSTest/MTP documentation](https://xunit.net/docs/getting-started/v3/microsoft-testing-platform) explains the VSTest adapter path. Stable package metadata was checked for [xunit.v3 3.2.2](https://www.nuget.org/packages/xunit.v3/3.2.2), [adapter 3.1.5](https://www.nuget.org/packages/xunit.runner.visualstudio/3.1.5), and [Test SDK 18.0.1](https://www.nuget.org/packages/Microsoft.NET.Test.Sdk/18.0.1). Restore, Release compilation, and adapter discovery verify the selected combination locally. See README for commands; no behavioral tests exist yet.
+Runner guidance: [xUnit VSTest/MTP documentation](https://xunit.net/docs/getting-started/v3/microsoft-testing-platform) explains the VSTest adapter path. Stable package metadata was checked for [xunit.v3 3.2.2](https://www.nuget.org/packages/xunit.v3/3.2.2), [adapter 3.1.5](https://www.nuget.org/packages/xunit.runner.visualstudio/3.1.5), and [Test SDK 18.0.1](https://www.nuget.org/packages/Microsoft.NET.Test.Sdk/18.0.1). Restore, Release compilation, and adapter discovery verify the selected combination locally. Phase 2 adds meaningful offline contract tests; integration tests remain phase 6 work.
 
 Use `ILogger<T>` initially. All stdio diagnostics must use stderr. OpenTelemetry is optional for later deployment; exporters must not corrupt stdout or expose financial data.
 
@@ -126,7 +126,7 @@ Use typed filter objects, for example:
 ```json
 {
   "type": "invoice_received",
-  "date": { "op": "range", "value": ["2026-01-01", "2026-03-31"] },
+  "date": { "op": "range", "value": "2026-01-01", "to": "2026-03-31" },
   "limit": 50
 }
 ```
@@ -134,6 +134,7 @@ Use typed filter objects, for example:
 - Filterable strings: eq, not_eq, like, not_like.
 - Filterable integers/dates: eq, not_eq, gt, gte, lt, lte, range.
 - Only one operator per field; range endpoints are inclusive.
+- Range uses typed `value` and `to` endpoints, with non-null `to` forbidden for every other operator. This refines the unimplemented planning syntax so no scalar/array union is needed in tool schemas.
 - Plain parameters such as invoice relationId accept direct values, not arbitrary filters.
 - Validate supported fields per endpoint and encode bracket syntax centrally.
 
@@ -147,8 +148,10 @@ Default limit 50, maximum 2000, offset at least zero. Return `items` and `page` 
 - `mode=period_change` requires from/to and sends both.
 - Return mode and requested dates with the result.
 - Use `decimal` internally, `DateOnly` for accounting dates, `DateTimeOffset` for expiry, and injected `TimeProvider` for time-dependent behavior.
-- Select and document the MCP monetary wire representation in phase 2. Decimal strings are suitable when consumer precision must be preserved. Never use binary floating point for arithmetic.
-- Preserve invoice IDs and mutation IDs as distinct concepts. Review identifier width inconsistencies before choosing public types.
+- MCP money, quantity and percentage values are invariant decimal strings, including original scale where decimal preserves it. Optional amounts remain null. Never use binary floating point for arithmetic.
+- API mutation identities use `long`, and MCP mutation identities serialize as decimal strings. Invoice and other IDs remain `int`. Mutation search permits int64; mutation detail requests enforce the specified int32 path width. See compatibility notes for the upstream inconsistency.
+- API JSON is case-insensitive with strict numeric types and required minimum invariants; MCP JSON is strict camelCase and rejects unknown/duplicate properties. API and MCP contracts are separate records with explicit mappings.
+- Invoice item `quantity` and deprecated `amount` are preserved independently, with no fallback or default-zero substitution. Unknown VAT/category response codes remain strings.
 
 ## Authentication and transport
 
