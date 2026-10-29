@@ -1,0 +1,16 @@
+**/bin/
+**/obj/
+**/TestResults/
+artifacts/
+.vs/
+.idea/
+*.user
+*.suo
+*.trx
+*.coverage
+*.coveragexml
+.env
+.env.*
+!.env.example
+**/appsettings.Local.json
+**/appsettings.*.Local.json

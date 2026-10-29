@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../EBoekhouden.Api/EBoekhouden.Api.csproj" />
+    <PackageReference Include="ModelContextProtocol" />
+  </ItemGroup>
+</Project>
