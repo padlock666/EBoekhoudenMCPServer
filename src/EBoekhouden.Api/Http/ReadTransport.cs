@@ -64,6 +64,7 @@ public sealed class ReadTransport : IDisposable
             try
             {
                 response = await client.SendAsync(message, linked.Token).ConfigureAwait(false);
+                response.RequestMessage = message;
                 if (linked.IsCancellationRequested)
                 {
                     response.Dispose();

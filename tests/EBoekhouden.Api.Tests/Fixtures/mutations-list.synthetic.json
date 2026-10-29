@@ -1,0 +1,5 @@
+{
+  "items": [{"id": 12, "type": 2, "date": "2026-01-01", "invoiceNumber": "SYN-INV-1",
+    "ledgerId": 7, "amount": -0.0001, "entryNumber": "SYN-ENTRY"}],
+  "count": 1
+}

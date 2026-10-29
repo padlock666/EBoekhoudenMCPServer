@@ -15,6 +15,7 @@ public static class ApiJson
             PropertyNameCaseInsensitive = true,
             RespectNullableAnnotations = true,
             RespectRequiredConstructorParameters = true,
+            AllowDuplicateProperties = false,
         };
         options.MakeReadOnly(populateMissingResolver: true);
         return options;

@@ -1,0 +1,12 @@
+{
+  "Id": 12, "Type": 99, "Date": "2026-01-01", "Description": "Synthetic mutation",
+  "TermOfPayment": null, "LedgerId": 7, "RelationId": 17, "InExVat": "EX",
+  "InvoiceNumber": "SYN-INV-1", "EntryNumber": "SYN-ENTRY",
+  "Rows": [
+    {"LedgerId": 8, "VatCode": "NL21", "VatAmount": null, "Amount": 0.1234567890123456789012345678,
+     "Description": "Synthetic row", "RelationId": null, "InvoiceNumber": null, "CostCenterId": 9},
+    {"Description": "Synthetic row with absent optional values"}
+  ],
+  "Vat": [{"VatCode": "FUTURE_VAT", "Amount": 0.01}],
+  "FutureField": "ignored"
+}

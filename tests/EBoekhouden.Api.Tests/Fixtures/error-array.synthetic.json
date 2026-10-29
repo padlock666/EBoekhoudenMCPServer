@@ -1,0 +1,5 @@
+{
+  "errors": ["Synthetic private field value", "Synthetic private details"],
+  "type": "validation", "code": "MUT_007", "title": "Synthetic private title",
+  "message": "Synthetic private message", "status": 400, "traceId": "TRACE-SYN-ARRAY-001"
+}

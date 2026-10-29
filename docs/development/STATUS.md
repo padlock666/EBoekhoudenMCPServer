@@ -6,10 +6,11 @@ Last updated: 2026-10-29.
 
 - Phase 1 scaffold is implemented: conventional solution, six SDK-style projects, shared build settings, central package versions, SDK pin, formatting and ignore rules.
 - `e-boekhouden-api-v1.yaml` is the upstream contract source.
-- All projects target `net10.0`. Release build succeeds with zero warnings/errors. The executable only reports the unfinished host on stderr and exits 1; typed endpoint clients and MCP transport are not wired yet.
+- All projects target `net10.0`. Release build succeeds with zero warnings/errors. The executable only reports the unfinished host on stderr and exits 1; MCP tools and executable transport are not wired yet.
 - Phase 2 implements all core read DTOs, separate MCP request/result records, strict contract serialization, typed filters, endpoint query encoding, validation, and explicit mappings. See [tool-contracts.md](../tool-contracts.md).
 - Phase 3 implements lazy single-credential session authentication, separate restricted factory clients, validated configuration/startup hook, shared attempt/concurrency/time budgets and circuit breaking. See [HTTP infrastructure](../http-infrastructure.md).
-- API and MCP projects now contain 211 passing offline synthetic tests (171 API, 40 MCP). IntegrationTests remains intentionally empty until phase 6.
+- Phase 4 implements IEBoekhoudenReadClient with all eleven typed GET operations, API-boundary response validation, disposal/cancellation and normalized safe errors. See [typed API client](../api-client.md).
+- API and MCP projects now contain 358 passing offline synthetic tests (318 API, 40 MCP). IntegrationTests remains intentionally empty until phase 6.
 - The workspace was not a Git repository at initial inspection. Git initialization is not required to begin implementation and has not been performed.
 - No live API behavior has been verified.
 
@@ -20,7 +21,7 @@ Last updated: 2026-10-29.
 | 1. Scaffold | Complete | Restore succeeded; six-project Release build: 0 warnings/errors; xUnit adapter discovery verified in all three empty test assemblies |
 | 2. Contracts and filters | Complete | Release build: 0 warnings/errors; 48 API and 40 MCP tests pass; exact ten-tool contracts documented |
 | 3. Authentication and HTTP | Complete | Restore and Release build succeed, 0 warnings/errors; full offline suite: 171 API + 40 MCP tests pass |
-| 4. API client | Not started | Design recorded only |
+| 4. API client | Complete | Eleven exact-request/typed-result endpoint fixtures; Release build: 0 warnings/errors; full offline suite: 318 API + 40 MCP tests pass |
 | 5. MCP tools and host | Not started | Design recorded only |
 | 6. Integration tests | Not started | Test requirements recorded only |
 | 7. Delivery and CI | Not started | Requirements recorded only |
@@ -28,7 +29,7 @@ Last updated: 2026-10-29.
 
 ## Next action
 
-Implement phase 4 from [PROMPTS.md](PROMPTS.md): consume ReadTransport/ReadRequest to implement the eleven required typed GET operations, dispose final responses, deserialize using ApiJson, and normalize errors without exposing raw bodies/messages. Add exact-request/response synthetic fixture tests, malformed/missing-field handling, cancellation and empty-result coverage. No live calls, deployment or tools/host wiring yet.
+Implement phase 5 from [PROMPTS.md](PROMPTS.md): verify pinned MCP SDK APIs, explicitly register the ten approved tools, wire the typed client and existing request/result mappers, configure strict argument/result serialization, and translate ApiException into tool errors. Build the actual stdio composition root with startup validation, external credentials, stderr diagnostics and clean cancellation/shutdown. Inspect generated schemas and add meaningful offline tool tests; no live API calls.
 
 ## Phase 1 validation evidence
 
@@ -128,6 +129,35 @@ OpenAPI SHA256 remains `b883304a41219a15395fde37110db3a6ea3c0d82a467e7c4123abb0e
 Unrun: live authentication/header/expiry verification (not authorized), typed endpoint/error-fixture coverage (phase 4), actual executable startup/configuration and SDK protocol/schema checks (phase 5), subprocess integration (phase 6), publish/CI/locks (phase 7). Startup validation is verified through its IStartupValidator hook without network, not by claiming the scaffold executable is a functioning host. Bearer-vs-bare-token prose remains explicitly unverified in API_COMPATIBILITY.md.
 
 No remaining phase 3 blocker. Next action is phase 4 typed read-only client and normalized errors.
+
+## Phase 4 handoff — 2026-10-29
+
+Implemented:
+
+- IEBoekhoudenReadClient / EBoekhoudenReadClient: relation list/detail, invoice list/detail, mutation list/detail, outstanding, ledger list/detail, all balances and single balance. Registered as singleton over existing ReadTransport, with only approved ReadRequest/QueryEncoder routes and required cancellation tokens.
+- Exact search/detail DTO separation, long mutation identities, DateOnly dates, nullable decimal money and optional arrays. No invoice payment inference, invoice/mutation conversion, absent-money zero defaults, PDF fetches or derived totals. Single/all balance scope validation occurs before authentication.
+- Only HTTP 200 typed shapes succeed. API boundary rejects null/malformed/missing/duplicate fields, inconsistent page counts and null nested elements; empty envelopes succeed. Existing duplicate-property JSON checks now also apply upstream. Reviewed optionality against GET schemas and recorded invoice-items prose/required-marker ambiguity.
+- ApiException has fixed safe messages, actual HTTP status, kind, optional sanitized code/trace and transport reason. Error array/dictionary/security shapes, non-JSON/malformed bodies and mismatched body status normalize defensively. Free text/raw bodies/URIs/inner exceptions never escape. Diagnostic inspection/format limits and credential/query echo redaction are documented.
+- Session errors use the same metadata sanitizer and retain available status/code/trace; invalid session payloads retain received status. No retry policy added. Final responses/streams are disposed; the typed-call deadline extends through parsing/validation and preserves caller cancellation.
+- Fourteen clearly labeled embedded synthetic JSON fixtures (eleven GET responses plus three error shapes), fixture README and endpoint/validation/error test classes. Tests retain the actual factory/authentication/guards/transport with only fake primary handlers.
+
+Files: new Api Clients/ and Errors/; ApiJson, DI registration, ReadTransport response provenance, session normalization and ApiTransportException metadata updates; API test resources/support/three test classes; [typed client](../api-client.md), README, tool-contract/infrastructure links, architecture, compatibility and status notes. No package, SDK or MCP contract change.
+
+Exact final verification commands (same writable cache/CLI paths as previous phases):
+
+```sh
+export DOTNET_CLI_HOME=/tmp/eboekhouden-dotnet
+export NUGET_PACKAGES=/tmp/eboekhouden-nuget
+dotnet build EBoekhoudenMcp.sln -c Release --no-restore -m:1 -nr:false
+dotnet test EBoekhoudenMcp.sln -c Release --no-build --no-restore -m:1 -nr:false --logger 'console;verbosity=minimal'
+sha256sum e-boekhouden-api-v1.yaml
+```
+
+Results: Release build exit 0, **0 warnings / 0 errors**. Full offline suite exit 0: **318 API + 40 MCP = 358 passed, 0 failed, 0 skipped**. IntegrationTests reports no tests, as expected. An earlier focused API run passed 284 tests before the final error-normalization cases were added; the final full run includes all 318 API tests. VSTest required approved local socket access; all upstream handlers were synthetic, with no live requests. No failures or remaining phase 4 blockers.
+
+Package graph unchanged; no new restore was needed. The OpenAPI SHA256 remains `b883304a41219a15395fde37110db3a6ea3c0d82a467e7c4123abb0e04b72ca9`. No secrets/actual financial records, Git operations, deployment or publication were introduced.
+
+Unrun: authorized live compatibility (not requested), SDK-generated schemas and actual stdio host/tool behavior (phase 5), subprocess integration (phase 6), publish/CI/locks (phase 7). API compatibility notes retain the unverified Bearer header, response required-field policy, mutation width conflict and diagnostic-format assumptions. Next action is phase 5; do not claim tools are callable until then.
 
 ## Handoff template
 

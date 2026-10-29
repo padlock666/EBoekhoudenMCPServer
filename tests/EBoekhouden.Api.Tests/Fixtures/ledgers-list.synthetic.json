@@ -1,0 +1,7 @@
+{
+  "Items": [
+    {"Id": 7, "Code": "7000", "Description": "Synthetic ledger A", "Category": "VW", "Group": null},
+    {"Id": 8, "Code": "1000", "Description": "Synthetic ledger B", "Category": "FUTURE", "Group": "synthetic-group"}
+  ],
+  "Count": 2
+}

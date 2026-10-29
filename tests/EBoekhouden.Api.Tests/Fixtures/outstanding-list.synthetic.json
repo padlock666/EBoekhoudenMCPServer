@@ -1,0 +1,9 @@
+{
+  "items": [
+    {"date": "2026-01-01", "mutationId": 12, "invoiceNumber": null, "relationId": 17,
+     "relationCode": null, "company": "Synthetic Debtor", "totalAmount": 100,
+     "paidAmount": 25, "outstandingAmount": 75},
+    {"date": "2026-01-02", "mutationId": 13}
+  ],
+  "count": 2
+}

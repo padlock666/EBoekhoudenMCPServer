@@ -1,6 +1,6 @@
 # Architecture and interface decisions
 
-Status: phases 1–3 are implemented: scaffold, contracts/mappings/filters, session authentication, and restricted HTTP infrastructure. Typed endpoint clients, tools and executable hosting below remain proposed. Consult [STATUS.md](STATUS.md) for evidence and [tool-contracts.md](../tool-contracts.md) for the exact implemented contracts.
+Status: phases 1–4 are implemented: scaffold, contracts/mappings/filters, authentication/HTTP infrastructure, and typed read-only client with normalized errors. Tools and executable hosting below remain proposed. Consult [STATUS.md](STATUS.md) for evidence and [tool-contracts.md](../tool-contracts.md) for the exact implemented contracts.
 
 ## Solution layout
 
@@ -170,6 +170,14 @@ Enforce exact approved methods, routes, and origin immediately before dispatch. 
 See [HTTP infrastructure](../http-infrastructure.md) for exact registration, external configuration, defaults, limits, circuit policy, request allowlist, timeout ownership, and test seams. Production uses two named factory clients with redirects/cookies disabled and all HTTP factory loggers removed. Session POSTs have no retry policy; one shared read loop owns the complete GET attempt budget, including one optional 401 replay. Default budget is three GET attempts and a 30-second operation deadline including queue/token waits, buffering and backoff. Token refresh uses a cancellation-aware lock and atomic lease-identity invalidation.
 
 The planned Http.Resilience/DataAnnotations dependencies were replaced by this explicit bounded policy and IValidateOptions validator to avoid multiple retry owners and keep configuration validation local. Production origin is fixed; the code-only test registration accepts numeric loopback origins only. ValidateOnStart is registered and tested through IStartupValidator; the executable composition root remains phase 5 work. Development user-secret metadata is present in the host project, with setup instructions in the infrastructure document.
+
+### Implemented phase 4 client
+
+`IEBoekhoudenReadClient` exposes exactly eleven typed GET operations for the ten tools. `EBoekhoudenReadClient` is registered as a singleton over the existing factory-backed ReadTransport. See [typed client](../api-client.md) for method/route/DTO mapping, the reviewed nullability policy, envelope/nested-element checks and error behavior. The API layer has no MCP dependency or arbitrary HTTP operation.
+
+Only HTTP 200 typed responses succeed. A 404 is an error, an empty list envelope succeeds, and malformed/missing/ambiguous data fails. Unknown/additive fields are tolerated, but duplicate JSON properties are rejected. Optional values remain null. Every final response/stream is disposed. A linked typed-call deadline extends the transport budget through JSON parsing; caller cancellation stays cancellation.
+
+ApiException uses fixed local messages, actual HTTP status and optional bounded/sanitized code/trace metadata. Error title/message/errors text and raw inner exceptions are discarded. Session errors use the same sanitizer; no extra retry layer was added. Phase 5 must translate ApiException into tool errors explicitly.
 
 ## MCP behavior
 

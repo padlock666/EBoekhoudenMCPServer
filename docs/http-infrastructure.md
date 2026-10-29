@@ -1,6 +1,6 @@
 # Authentication and HTTP infrastructure
 
-Phase 3 implements reusable API infrastructure, not MCP tools or the executable composition root. Phase 4 will consume `ReadTransport` for typed responses; phase 5 will wire the Generic Host and transport. No live API behavior has been verified.
+Phase 3 implements reusable API infrastructure, not MCP tools or the executable composition root. The [phase 4 typed client](api-client.md) now consumes `ReadTransport` for typed responses and normalized errors; phase 5 will wire the Generic Host and transport. No live API behavior has been verified.
 
 ## Registration and external configuration
 

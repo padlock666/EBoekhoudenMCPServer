@@ -1,6 +1,6 @@
 # Core tool contracts
 
-Phase 2 implements the contracts, validation, query encoding, and explicit API-to-MCP mappings below. Tools and their generated MCP schemas are registered and checked in phase 5; these tools are not callable yet. All business routes are GET. One externally configured credential determines administration scope. There is no database, arbitrary URL/query tool, administration switch, server-side sorting, automatic traversal, or derived report.
+Phase 2 implements the contracts, validation, query encoding, and explicit API-to-MCP mappings below. The [phase 4 typed client](api-client.md) implements all underlying GET operations and normalized errors. Tools and their generated MCP schemas are registered and checked in phase 5; these tools are not callable yet. All business routes are GET. One externally configured credential determines administration scope. There is no database, arbitrary URL/query tool, administration switch, server-side sorting, automatic traversal, or derived report.
 
 ## Common input rules
 

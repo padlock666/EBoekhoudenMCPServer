@@ -1,0 +1,10 @@
+{
+  "items": [{
+    "id": 23, "invoiceNumber": "SYN-INV-1", "relationId": 17,
+    "date": "2026-02-28", "reference": "Synthetic reference", "text": null,
+    "totalExcl": 100.00, "totalAmount": 121.00, "termOfPayment": 14,
+    "templateId": 31, "print": false,
+    "urlPdfFile": "https://files.example.invalid/synthetic.pdf"
+  }],
+  "count": 1
+}

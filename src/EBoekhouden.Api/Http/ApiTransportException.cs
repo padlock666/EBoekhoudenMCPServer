@@ -17,11 +17,15 @@ public sealed class ApiTransportException : Exception
 {
     public TransportFailure Failure { get; }
     public HttpStatusCode? StatusCode { get; }
+    public string? Code { get; }
+    public string? TraceId { get; }
 
-    internal ApiTransportException(TransportFailure failure, HttpStatusCode? statusCode = null)
+    internal ApiTransportException(TransportFailure failure, HttpStatusCode? statusCode = null, string? code = null, string? traceId = null)
         : base("e-Boekhouden transport failed: " + failure + ".")
     {
         Failure = failure;
         StatusCode = statusCode;
+        Code = code;
+        TraceId = traceId;
     }
 }

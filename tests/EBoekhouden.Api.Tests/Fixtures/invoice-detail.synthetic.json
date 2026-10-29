@@ -1,0 +1,15 @@
+{
+  "Id": 23, "InvoiceNumber": "SYN-INV-1", "RelationId": 17,
+  "Date": "2026-02-28", "Reference": "Synthetic reference", "InExVat": "EX",
+  "TermOfPayment": 14, "TemplateId": 31, "EmailTemplateId": null,
+  "TotalExcl": 100.00, "TotalAmount": 121.00, "VatAmount": null,
+  "UrlPdfFile": "https://files.example.invalid/synthetic.pdf",
+  "Items": [
+    {"Description": "Synthetic item A", "VatCode": "FUTURE_VAT", "LedgerId": 7,
+     "Quantity": 2.1250, "Amount": 9, "PricePerUnit": 12.345678901234567890,
+     "CostCenterId": null, "DiscountAmount": null, "DiscountPercentage": 0.125},
+    {"Description": "Synthetic item B", "VatCode": "GEEN", "LedgerId": 8,
+     "Amount": 3, "PricePerUnit": null}
+  ],
+  "FutureField": true
+}

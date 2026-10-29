@@ -1,0 +1,7 @@
+{
+  "items": [
+    {"code": "1000", "type": "DEB", "balance": 500.12345678},
+    {"code": "2000", "type": "CRED", "balance": -125.00}
+  ],
+  "count": 2
+}

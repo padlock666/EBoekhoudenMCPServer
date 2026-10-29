@@ -1,0 +1,4 @@
+{
+  "id": 7, "code": "SYN7", "description": "Synthetic ledger detail",
+  "category": "NEWCAT", "group": "SYN-GROUP", "futureField": true
+}

@@ -1,5 +1,6 @@
 using System.Net;
 using EBoekhouden.Api.Authentication;
+using EBoekhouden.Api.Clients;
 using EBoekhouden.Api.Configuration;
 using EBoekhouden.Api.Http;
 using Microsoft.Extensions.Configuration;
@@ -41,6 +42,7 @@ public static class ApiServiceCollectionExtensions
         services.AddSingleton(sp => new ReadTransport(sp.GetRequiredService<IHttpClientFactory>(),
             sp.GetRequiredService<SessionTokenProvider>(), sp.GetRequiredService<IOptions<EBoekhoudenOptions>>(),
             sp.GetRequiredService<TimeProvider>()));
+        services.AddSingleton<IEBoekhoudenReadClient, EBoekhoudenReadClient>();
         AddClient(SessionClientName, true);
         AddClient(ReadClientName, false);
         return services;

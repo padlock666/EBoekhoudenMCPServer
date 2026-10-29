@@ -1,0 +1,6 @@
+{
+  "securityType": "0", "type": "security", "status": 403,
+  "title": "Synthetic private authentication detail",
+  "message": "Synthetic credential information must never escape.",
+  "code": "API_SESSION_004", "traceId": "SYN-AUTH-0001"
+}

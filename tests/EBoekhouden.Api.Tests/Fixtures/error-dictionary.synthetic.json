@@ -1,0 +1,6 @@
+{
+  "Errors": {"synthetic.field": ["Synthetic financial details must never escape."]},
+  "Type": "validation", "PropertyName": "synthetic.field", "Code": "EXAMPLE_001",
+  "Title": "Synthetic private title", "Message": "Synthetic private body message",
+  "Status": 999, "TraceId": "ABCDEF-123456."
+}
