@@ -1,6 +1,6 @@
 # Architecture and interface decisions
 
-Status: phase 1 scaffold and phase 2 contracts, validation, query encoding, and mappings are implemented. Authentication, HTTP clients, tools, and hosting below remain proposed. Consult [STATUS.md](STATUS.md) for evidence and [tool-contracts.md](../tool-contracts.md) for the exact implemented contracts.
+Status: phases 1–3 are implemented: scaffold, contracts/mappings/filters, session authentication, and restricted HTTP infrastructure. Typed endpoint clients, tools and executable hosting below remain proposed. Consult [STATUS.md](STATUS.md) for evidence and [tool-contracts.md](../tool-contracts.md) for the exact implemented contracts.
 
 ## Solution layout
 
@@ -65,9 +65,9 @@ Tools initially call the typed read client directly. Add query services only whe
 | MCP and stdio | `ModelContextProtocol` |
 | Host lifecycle and DI | `Microsoft.Extensions.Hosting` |
 | Typed HTTP clients | `Microsoft.Extensions.Http` |
-| HTTP resilience | `Microsoft.Extensions.Http.Resilience` |
+| HTTP resilience | One explicit bounded read loop with authentication replay and shared circuit breaker |
 | JSON | Built-in `System.Text.Json` |
-| Options validation | `Microsoft.Extensions.Options.DataAnnotations` |
+| Options validation | `Microsoft.Extensions.Options.ConfigurationExtensions` with custom `IValidateOptions` and `ValidateOnStart` |
 | Tests | `xunit.v3` and a compatible runner configuration |
 | Later HTTP transport | `ModelContextProtocol.AspNetCore` |
 
@@ -77,7 +77,7 @@ Pin verified stable versions in `Directory.Packages.props`, SDK in `global.json`
 
 - SDK: installed stable **10.0.113**, exact pin with prereleases disabled; all six projects inherit `net10.0`.
 - `ModelContextProtocol` **2.3.0** in Mcp and IntegrationTests; the host receives it through Mcp. This is the official package for stdio with hosting/DI, and supports `net10.0`.
-- `Microsoft.Extensions.Hosting` **10.0.13** in the executable, compatible with the MCP package's Extensions dependency minimums. HTTP, resilience, and options-validation packages will be selected and pinned when used in phase 3; no HTTP hosting package is included.
+- `Microsoft.Extensions.Hosting` **10.0.13** in the executable, compatible with the MCP package's Extensions dependency minimums. Phase 3 adds Http and Options.ConfigurationExtensions 10.0.13; resilience uses a single explicit loop and custom options validation. No HTTP hosting package is included.
 - `xunit.v3` **3.2.2**, `xunit.runner.visualstudio` **3.1.5**, and `Microsoft.NET.Test.Sdk` **18.0.1** in each test project. VSTest is explicitly selected in `global.json`; test projects use `OutputType=Exe`, `IsTestProject=true`, and `IsPackable=false`. The adapter is private to each test project. No test-only dependency is referenced by production projects.
 - Built-in .NET 10 analyzers and nullable checking are enabled centrally. CA2016 warns when cancellation tokens are not forwarded. No separate analyzer framework is added.
 - The host currently exits with a static stderr diagnostic and status 1; phase 5 supplies the real composition root. There are no placeholder API/tool classes or dummy tests.
@@ -164,6 +164,12 @@ Attach authorization per request. One authentication refresh/replay is permitted
 Configure timeouts, limited concurrency, transient retries with backoff/jitter, and circuit breaking. Honor Retry-After where applicable. Do not automatically retry the session POST. Avoid stacked independent retry policies that multiply requests unexpectedly.
 
 Enforce exact approved methods, routes, and origin immediately before dispatch. Disable redirects. No arbitrary URL parameter. Loopback origin overrides are allowed only in explicit test configuration.
+
+### Implemented phase 3 policy
+
+See [HTTP infrastructure](../http-infrastructure.md) for exact registration, external configuration, defaults, limits, circuit policy, request allowlist, timeout ownership, and test seams. Production uses two named factory clients with redirects/cookies disabled and all HTTP factory loggers removed. Session POSTs have no retry policy; one shared read loop owns the complete GET attempt budget, including one optional 401 replay. Default budget is three GET attempts and a 30-second operation deadline including queue/token waits, buffering and backoff. Token refresh uses a cancellation-aware lock and atomic lease-identity invalidation.
+
+The planned Http.Resilience/DataAnnotations dependencies were replaced by this explicit bounded policy and IValidateOptions validator to avoid multiple retry owners and keep configuration validation local. Production origin is fixed; the code-only test registration accepts numeric loopback origins only. ValidateOnStart is registered and tested through IStartupValidator; the executable composition root remains phase 5 work. Development user-secret metadata is present in the host project, with setup instructions in the infrastructure document.
 
 ## MCP behavior
 

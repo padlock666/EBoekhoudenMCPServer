@@ -6,10 +6,10 @@ Source: repository file `e-boekhouden-api-v1.yaml`. Initial review: 2026-10-29. 
 
 | Topic | Evidence or constraint | Implementation direction | Verification |
 | --- | --- | --- | --- |
-| Authorization header | Quick-start prose uses the token directly; securitySchemes gives `Bearer SESSION_TOKEN` | Initially follow securitySchemes; isolate header construction and document assumption | Live verification pending |
+| Authorization header | Quick-start prose uses the token directly; securitySchemes gives `Bearer SESSION_TOKEN` | Implemented per-request Bearer construction in ReadTransport; session POST has no Authorization header | Offline header tests pass; conflicting bare-token prose remains live-unverified |
 | JSON casing | Schemas use camelCase; examples use PascalCase | Use deliberate case-insensitive upstream deserialization and stable MCP output casing | Case-insensitive API / strict camelCase MCP tests pass; live pending |
-| Session creation | POST /v1/session requires accessToken and source; response has token and expiresIn | Internal-only authentication exception; cache by expiry | Offline tests planned |
-| Source identifier | Maximum length 10 with a documented pattern | Validate configuration against spec | Offline tests planned |
+| Session creation | POST /v1/session requires accessToken and source; response has token and expiresIn | Internal-only, lazy serialized acquisition; conservative lifetime from request start, early refresh, lease-identity invalidation; no POST retries | Offline reuse/concurrency/expiry/failure/cancellation and stale-response tests pass |
+| Source identifier | Maximum length 10 with a documented pattern | Validate the exact pattern and credential presence at startup without network access, using static validation errors | Offline startup validation tests pass |
 | Relation search | Returns id, type, code only | Do not fabricate names; get_relation retrieves details | Spec-reviewed |
 | Invoice versus mutation | Invoicing and accounting are separate resources | Keep IDs and contracts distinct | Spec-reviewed |
 | Outstanding balances | Endpoint requires credDeb C or D and returns mutationId | Map payable/receivable explicitly; no invented relation/date filters | Spec-reviewed |
@@ -29,6 +29,13 @@ Source: repository file `e-boekhouden-api-v1.yaml`. Initial review: 2026-10-29. 
 - Decimal JSON fields are modeled as nullable decimal when optional. MCP maps decimals to invariant strings, with no rounding or invented currency. Quoted upstream monetary strings are rejected until actual evidence justifies a compatibility converter. Out-of-range decimal values fail deserialization; precision is bounded by .NET decimal.
 - API DTOs accept additive fields and either casing. MCP requests use strict camelCase with duplicate/unknown fields rejected. Generated SDK schemas and argument binding still require phase 5 verification.
 - Optional nested collections distinguish missing/null from empty; null collection elements fail result mapping. This prevents incomplete data from looking like a known-empty financial response.
+
+## Phase 3 authentication assumptions
+
+- `expiresIn` is treated as seconds and measured from the request start rather than response arrival, with an early refresh margin capped at 10% of lifetime. Invalid/nonpositive lifetimes or responses already beyond the refresh point are rejected without caching. These conservative timing choices are tested offline, not observed live.
+- Session token strings must be valid RFC 6750 Bearer credentials. This prevents header injection and follows the securitySchemes example; the specification itself declares only string and does not define a token alphabet. If authorized live testing finds a different format/header requirement, revise the isolated handling with a regression test.
+- Only HTTP 401 triggers one authentication replay. HTTP 403 is treated as a permission denial. Session HTTP failures, including 403 and transient errors, are never automatically retried. Actual upstream failure distinctions remain live-unverified.
+- Production origin is fixed to the supplied server URL; no discovery or administration routes were added. Redirects are never followed. See [HTTP infrastructure](../http-infrastructure.md) for the exact allowlist and bounded retry policy.
 
 ## Live smoke test, when authorized
 
