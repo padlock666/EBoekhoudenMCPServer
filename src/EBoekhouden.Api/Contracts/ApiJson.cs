@@ -4,7 +4,7 @@ namespace EBoekhouden.Api.Contracts;
 
 public static class ApiJson
 {
-    // Accept documented camelCase and PascalCase examples, but never coerce numbers.
+    // Accept both documented casings. Numeric strings are restricted to the annotated mutation type.
     public static JsonSerializerOptions Options { get; } = CreateOptions();
 
     private static JsonSerializerOptions CreateOptions()
@@ -17,6 +17,7 @@ public static class ApiJson
             RespectRequiredConstructorParameters = true,
             AllowDuplicateProperties = false,
         };
+        options.Converters.Add(new ExactDecimalConverter());
         options.MakeReadOnly(populateMissingResolver: true);
         return options;
     }

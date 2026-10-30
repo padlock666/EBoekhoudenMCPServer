@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace EBoekhouden.Api.Contracts;
 
 public sealed record RelationSummaryDto
@@ -114,6 +116,8 @@ public sealed record InvoiceItemDto
 public sealed record EntrySummaryDto
 {
     public required long Id { get; init; }
+    // MutationType is a string enum in the schema, but numeric in response examples.
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
     public int? Type { get; init; }
     public required DateOnly Date { get; init; }
     public string? InvoiceNumber { get; init; }
@@ -125,6 +129,7 @@ public sealed record EntrySummaryDto
 public sealed record EntryDto
 {
     public required long Id { get; init; }
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
     public int? Type { get; init; }
     public required DateOnly Date { get; init; }
     public string? Description { get; init; }

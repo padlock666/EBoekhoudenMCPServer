@@ -9,6 +9,75 @@ namespace EBoekhouden.IntegrationTests;
 public sealed class ExecutableTests
 {
     [Fact]
+    public async Task StringMutationTypesFromTheSchemaProduceNumericMcpTypes()
+    {
+        await using var api = await FakeUpstream.StartAsync();
+        api.Respond = (context, session, _) =>
+        {
+            if (session > 0) return Task.FromResult(FakeUpstream.Session(session));
+            var item = """{"id":12,"date":"2026-01-01","type":"2"}""";
+            return Task.FromResult(new FakeUpstream.Reply(200, context.Request.Path == "/v1/mutation"
+                ? "{\"items\":[" + item + "],\"count\":1}" : item));
+        };
+        await using var host = StdioProcess.Start(api.Origin);
+        await host.ConnectAsync();
+        var page = Success(await host.CallAsync("search_entries"));
+        Assert.Equal(2, page.GetProperty("items")[0].GetProperty("type").GetInt32());
+        var detail = Success(await host.CallAsync("get_entry", """{"id":12}"""));
+        Assert.Equal(2, detail.GetProperty("type").GetInt32());
+        Assert.Equal("12", detail.GetProperty("id").GetString());
+        await host.CloseInputAndWaitAsync(); host.AssertCleanOutput(); api.AssertHealthy();
+    }
+
+    [Theory]
+    [InlineData("1e-29")]
+    [InlineData("79228162514264337593543950335.1")]
+    public async Task InexactBalanceIsAToolErrorAndFollowingExactReadStillWorks(string number)
+    {
+        await using var api = await FakeUpstream.StartAsync();
+        var reads = 0;
+        api.Respond = (context, session, _) => Task.FromResult(session > 0 ? FakeUpstream.Session(session)
+            : ++reads == 1 ? new FakeUpstream.Reply(200, "{\"code\":\"SYN\",\"type\":\"BAL\",\"balance\":" + number + "}")
+            : FakeUpstream.DefaultReply(context.Request, session));
+        await using var host = StdioProcess.Start(api.Origin);
+        await host.ConnectAsync();
+        const string arguments = """{"mode":"as_of","to":"2026-03-31","ledgerId":7}""";
+        var error = Failure(await host.CallAsync("get_ledger_balances", arguments));
+        Assert.Equal("upstream_failure", error.GetProperty("kind").GetString());
+        Assert.Equal(200, error.GetProperty("status").GetInt32());
+        Assert.Equal(1, api.Reads);
+        Assert.DoesNotContain(number, error.GetRawText());
+        var result = Success(await host.CallAsync("get_ledger_balances", arguments));
+        Assert.Equal("-12.3456", result.GetProperty("items")[0].GetProperty("balance").GetString());
+        Assert.Equal(1, api.Sessions);
+        Assert.Equal(2, api.Reads);
+        await host.CloseInputAndWaitAsync(); host.AssertCleanOutput(); api.AssertHealthy();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OversizedForbiddenBodyKeepsStatusWithoutExtraAttempts(bool sessionFailure)
+    {
+        await using var api = await FakeUpstream.StartAsync();
+        // Headers announce a body larger than the buffer cap. No large fixture is needed on disk.
+        api.Respond = (context, session, _) =>
+        {
+            if (session > 0 && !sessionFailure) return Task.FromResult(FakeUpstream.Session(session));
+            context.Response.ContentLength = sessionFailure ? 16 * 1024 + 1 : 16 * 1024 * 1024 + 1;
+            return Task.FromResult(new FakeUpstream.Reply(403, ""));
+        };
+        await using var host = StdioProcess.Start(api.Origin);
+        await host.ConnectAsync();
+        var error = Failure(await host.CallAsync("get_relation", """{"id":17}"""));
+        Assert.Equal(403, error.GetProperty("status").GetInt32());
+        Assert.Equal("upstream_failure", error.GetProperty("kind").GetString());
+        Assert.Equal(1, api.Sessions);
+        Assert.Equal(sessionFailure ? 0 : 1, api.Reads);
+        await host.CloseInputAndWaitAsync(); host.AssertCleanOutput(); api.AssertHealthy();
+    }
+
+    [Fact]
     public async Task DevelopmentUserSecretsAllowOfflineStartupWithoutCredentialEnvironmentVariables()
     {
         var appData = Path.Combine(Path.GetTempPath(), "eboekhouden-secrets-test-" + Guid.NewGuid().ToString("N"));

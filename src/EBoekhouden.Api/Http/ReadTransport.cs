@@ -63,7 +63,9 @@ public sealed class ReadTransport : IDisposable
             HttpResponseMessage response;
             try
             {
-                response = await client.SendAsync(message, linked.Token).ConfigureAwait(false);
+                response = await client.SendAsync(message, HttpCompletionOption.ResponseHeadersRead, linked.Token).ConfigureAwait(false);
+                try { await ResponseBuffer.LoadAsync(response, client.MaxResponseContentBufferSize, linked.Token).ConfigureAwait(false); }
+                catch { response.Dispose(); throw; }
                 response.RequestMessage = message;
                 if (linked.IsCancellationRequested)
                 {

@@ -28,6 +28,6 @@ Review all affected lock-file diffs, including transitive versions and hashes. R
 
 ## Verification scope
 
-Local verification covers Linux x64, the pinned SDK, .NET 10.0.13, the portable DLL publish and synthetic loopback HTTP. Windows/macOS, RID-specific apphosts, self-contained output and hosted Actions infrastructure are not claimed tested. Existing API header/expiry/response assumptions and SDK local-cancellation behavior remain in [compatibility notes](development/API_COMPATIBILITY.md). Independent release review is phase 8.
+Local verification covers Linux x64, the pinned SDK, .NET 10.0.13, the portable DLL publish and synthetic loopback HTTP. Windows/macOS, RID-specific apphosts, self-contained output and hosted Actions infrastructure are not claimed tested. Existing API header/expiry/response assumptions and SDK local-cancellation behavior remain in [compatibility notes](development/API_COMPATIBILITY.md). The [phase 8 review](development/REVIEW.md) records verified local evidence and remaining compatibility limits.
 
 Primary references checked during implementation: [NuGet lock files](https://learn.microsoft.com/en-us/nuget/consume-packages/package-references-in-project-files#locking-dependencies), [dotnet publish](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-publish), [pinned checkout metadata](https://github.com/actions/checkout/blob/d23441a48e516b6c34aea4fa41551a30e30af803/action.yml) and [pinned setup-dotnet metadata](https://github.com/actions/setup-dotnet/blob/26b0ec14cb23fa6904739307f278c14f94c95bf1/action.yml).

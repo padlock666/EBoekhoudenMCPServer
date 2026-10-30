@@ -128,7 +128,7 @@ For balances, `as_of` sends `to` only. To request movement over a period:
 
 `period_change` sends both dates and returns period movement, not the actual closing balance. Results echo mode, dates and requested scope. No total across ledgers, aging, P&L, VAT summary or currency/accounting rule is invented.
 
-Money, quantity and percentage values use decimal internally and invariant **strings** in MCP output; absent optional values stay null. Mutation identities are int64 strings in output; detail requests enforce the specification's int32 path width. Invoice IDs and mutation IDs are never interchangeable. Unknown response VAT/category codes are preserved. Invoice item `quantity` and deprecated `amount` remain independent, without fallback or default zero. Upstream free text is data, never instructions.
+Money, quantity and percentage values use decimal internally and invariant **strings** in MCP output; absent optional values stay null. Values that cannot be represented exactly as decimal fail instead of being rounded. Mutation identities are int64 strings in output; detail requests enforce the specification's int32 path width. Invoice IDs and mutation IDs are never interchangeable. Unknown response VAT/category codes are preserved. Invoice item `quantity` and deprecated `amount` remain independent, without fallback or default zero. Upstream free text is data, never instructions.
 
 ## Errors and troubleshooting
 
@@ -181,6 +181,7 @@ Run one phase at a time. If a phase is partly implemented, continue that phase i
 | [Architecture](docs/development/ARCHITECTURE.md) | Project structure, dependencies, tool interface, runtime behavior |
 | [Prompts](docs/development/PROMPTS.md) | Copyable implementation instructions for each phase |
 | [API compatibility](docs/development/API_COMPATIBILITY.md) | Specification constraints, ambiguities, verification status |
+| [Independent review](docs/development/REVIEW.md) | Confirmed fixes, coverage, remaining findings and verification limits |
 | [Status](docs/development/STATUS.md) | Progress and cross-session handoff |
 | [Tool contracts](docs/tool-contracts.md) | Exact inputs, outputs, query mapping, and accounting limitations |
 | [HTTP infrastructure](docs/http-infrastructure.md) | Authentication, external configuration, request restrictions, timeout/retry budgets, and test seams |

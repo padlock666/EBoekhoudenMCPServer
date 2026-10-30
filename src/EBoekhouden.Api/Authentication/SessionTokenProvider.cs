@@ -56,8 +56,9 @@ internal sealed partial class SessionTokenProvider(
         HttpStatusCode? receivedStatus = null;
         try
         {
-            using var response = await client.SendAsync(request, linked.Token).ConfigureAwait(false);
+            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linked.Token).ConfigureAwait(false);
             receivedStatus = response.StatusCode;
+            await ResponseBuffer.LoadAsync(response, client.MaxResponseContentBufferSize, linked.Token).ConfigureAwait(false);
             response.RequestMessage = request;
             linked.Token.ThrowIfCancellationRequested();
             if (!response.IsSuccessStatusCode)

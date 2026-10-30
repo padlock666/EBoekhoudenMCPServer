@@ -10,7 +10,7 @@ Last updated: 2026-10-30.
 - Phase 2 implements all core read DTOs, separate MCP request/result records, strict contract serialization, typed filters, endpoint query encoding, validation, and explicit mappings. See [tool-contracts.md](../tool-contracts.md).
 - Phase 3 implements lazy single-credential session authentication, separate restricted factory clients, validated configuration/startup hook, shared attempt/concurrency/time budgets and circuit breaking. See [HTTP infrastructure](../http-infrastructure.md).
 - Phase 4 implements IEBoekhoudenReadClient with all eleven typed GET operations, API-boundary response validation, disposal/cancellation and normalized safe errors. See [typed API client](../api-client.md).
-- The full offline suite contains 438 passing tests: 318 API, 86 MCP and 34 executable/protocol integration cases. Phase 7 additionally reruns all 34 integration cases against the actual local publish.
+- The independently re-run offline suite contains 465 passing tests: 340 API, 86 MCP and 39 executable/protocol integration cases. All 39 integration cases also pass against the actual local publish. Phase 8 fixed decimal rounding, error-status loss during buffering and schema-conforming mutation type rejection; see [REVIEW.md](REVIEW.md).
 - The workspace was not a Git repository at initial inspection. Git initialization is not required to begin implementation and has not been performed.
 - No live API behavior has been verified.
 
@@ -25,11 +25,11 @@ Last updated: 2026-10-30.
 | 5. MCP tools and host | Complete | Official SDK ten-tool wire schemas/structured results verified; Generic Host and executable smoke checks; Release build 0 warnings/errors; 318 API + 86 MCP tests pass |
 | 6. Integration tests | Complete | Actual host/SDK stdio + loopback fake HTTP; 32 integration cases; full offline suite 436 passed; Release build 0 warnings/errors |
 | 7. Delivery and CI | Complete | Six dependency locks; locked restore and clean Release build; 438 offline tests + 34 published-artifact cases pass; shared local/CI pipeline and GitHub Actions configuration |
-| 8. Independent review | Not started | Review prompt available |
+| 8. Independent review | Complete for local offline scope | Three confirmed P2 defects fixed; locked restore, clean Release build, 465 offline tests + 39 published-artifact cases pass; remaining SDK/live/hosted/platform limits recorded in REVIEW.md |
 
 ## Next action
 
-Phase 8: independent review from [PROMPTS.md](PROMPTS.md) in a fresh session. Inspect the real code, package/lock graph, CI configuration and local published artifact; preserve offline defaults. Hosted Actions execution and live API compatibility are not claimed. No deployment, package publication or Git commits.
+Review the focused fixes and remaining findings in [REVIEW.md](REVIEW.md), then run the hosted GitHub Actions workflow when available. A minimal read-only live compatibility check requires separate explicit authorization and credentials. Local offline criteria have execution evidence; hosted Actions, other platforms and live API compatibility are not marked verified. No deployment, package publication or Git commits.
 
 ## Phase 1 validation evidence
 
@@ -283,3 +283,41 @@ Decisions / compatibility findings:
 Known failures or blockers:
 Next concrete action:
 ```
+
+## Phase 8 independent review handoff — 2026-10-30
+
+Reviewed actual solution/projects, central dependencies and locks, API/authentication/HTTP/filter contracts, MCP mappings/schemas, host lifecycle, synthetic test harnesses, delivery workflow/docs and relevant OpenAPI operations/components. The initial working tree was clean. The OpenAPI and existing package/SDK/schema pins remain unchanged.
+
+Confirmed and fixed three **P2 / medium** defects, each reproduced before its fix:
+
+1. Built-in decimal deserialization silently rounded excess precision/underflow. ExactDecimalConverter now rejects changed financial values; exact exponents, decimal extrema, preserved scale and nullable fields remain supported.
+2. Automatic HttpClient buffering lost received error status on oversized/broken diagnostic bodies and retried GET permission denials as network failures. Headers-first bounded buffering preserves status and discards unreadable diagnostics; disposal/cancellation and existing retry budgets remain enforced.
+3. Mutation Type accepted only numeric examples, rejecting the specification’s string enum. Only the two upstream mutation Type properties now accept int32 strings as well as numbers; numeric MCP output and strict identity/financial/request parsing remain intact.
+
+Added 22 API regression cases and five actual executable/protocol cases. Updated API/HTTP/tool/compatibility notes and the review report. No additional package, tool, route, database or accounting rule.
+
+Exact main commands (with writable sandbox cache environment):
+
+```sh
+export DOTNET_CLI_HOME=/tmp/eboekhouden-dotnet
+export NUGET_PACKAGES=/tmp/eboekhouden-nuget
+bash scripts/verify.sh > /tmp/eboekhouden-review-baseline.log 2>&1
+dotnet test tests/EBoekhouden.Api.Tests -c Release --no-restore -m:1 -nr:false --filter FullyQualifiedName~ReviewRegressionTests --logger 'console;verbosity=minimal'
+dotnet test tests/EBoekhouden.Api.Tests -c Release --no-restore -m:1 -nr:false --filter FullyQualifiedName~MutationTypeAcceptsTheSchemaString --logger 'console;verbosity=minimal'
+bash scripts/verify.sh > /tmp/eboekhouden-review-final.log 2>&1
+dotnet list EBoekhoudenMcp.sln package --vulnerable --include-transitive --no-restore --format json
+DOTNET_CLI_HOME=/tmp/eboekhouden-dotnet NUGET_PACKAGES=/tmp/eboekhouden-nuget dotnet run --project /tmp/eboekhouden-schema-probe -c Release --no-restore --no-launch-profile -p:BuildInParallel=false
+git diff --check
+sha256sum e-boekhouden-api-v1.yaml
+```
+
+Outcomes:
+
+- Baseline workflow exit 0: 438 tests and 34 artifact cases pass, confirming the old suite did not detect the three findings.
+- Pre-fix regression runs: expected exit 1; five decimal/buffer cases failed, six exact-decimal controls passed; two mutation-type cases failed. The first oversized fake reused disposed content on retry; it was corrected to create fresh content per attempt and rerun, confirming status loss without that harness error.
+- Final workflow exit 0: locked restore succeeds; Release build **0 warnings / 0 errors**; **340 API + 86 MCP + 39 integration = 465 unique tests pass**, none failed/skipped. Release publish succeeds into ignored artifacts/publish/stdio; all **39 integration tests pass again against that published DLL**. Includes revised error buffering and decimal/type behavior, exact schemas, synthetic secrets, EOF/cancellation and subprocess cleanup.
+- NuGet vulnerability query exit 0: no reported advisories for direct/transitive dependencies in the six projects at review time. Production graphs contain no test packages. Pins/locks unchanged.
+- Independent static property comparison: all 13 resource/nested DTO field sets match OpenAPI. Current SDK/schema exporter rebuilt successfully, making no HTTP invocation. Python jsonschema 4.23.0 validates 20 schemas, ten fresh mapped synthetic outputs and ten README arguments; actual SDK schemas equal the reviewed snapshot.
+- OpenAPI SHA256 unchanged: b883304a41219a15395fde37110db3a6ea3c0d82a467e7c4123abb0e04b72ca9. Final whitespace/document link/lock/publish checks pass.
+
+Network/local-socket permission was granted for public NuGet metadata and VSTest/loopback checks; no current blocker for executed checks. No live API, deployment, package push or Git commit. Hosted Actions, Windows/macOS, IPv6 listener and OS-signal checks remain unrun. SDK client local-task cancellation alone remains an interoperability limitation; explicit notifications abort upstream HTTP. Live Bearer/token format/expiry, response completeness and identifier-width assumptions remain unverified. Full severities, impacts and file references are in [REVIEW.md](REVIEW.md). Phase 8 completes the local offline review, not blanket release certification across unrun environments.

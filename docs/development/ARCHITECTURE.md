@@ -1,6 +1,6 @@
 # Architecture and interface decisions
 
-Status: phases 1–7 are implemented: scaffold, contracts/mappings/filters, authentication/HTTP infrastructure, typed read-only client, ten MCP tools, stdio executable, offline subprocess integration tests, locked dependencies, local publish and CI configuration. Consult [STATUS.md](STATUS.md) for evidence and [tool-contracts.md](../tool-contracts.md) for the exact implemented contracts.
+Status: phases 1–7 are implemented and phase 8 has reviewed and corrected the implementation; see [REVIEW.md](REVIEW.md). Implemented scope: scaffold, contracts/mappings/filters, authentication/HTTP infrastructure, typed read-only client, ten MCP tools, stdio executable, offline subprocess integration tests, locked dependencies, local publish and CI configuration. Consult [STATUS.md](STATUS.md) for evidence and [tool-contracts.md](../tool-contracts.md) for the exact implemented contracts.
 
 ## Solution layout
 
@@ -35,7 +35,6 @@ src/
   EBoekhouden.Host.Stdio/
     EBoekhouden.Host.Stdio.csproj
     Program.cs
-    appsettings.json
 tests/
   EBoekhouden.Api.Tests/
     EBoekhouden.Api.Tests.csproj

@@ -31,7 +31,7 @@ Each child receives a cleared environment with only necessary runtime/system pat
 ## Coverage
 
 - Initialization, discovery, exactly ten reviewed wire schemas and annotations; initialize revisions 2025-06-18/2025-11-25 and the SDK's 2026-07-28 discovery revision.
-- All ten tools and eleven GET routes, exact encoded requests, structured/text equality, decimal precision, optional quantities, unknown codes, invoice/mutation identity and lazy authentication.
+- All ten tools and eleven GET routes, exact encoded requests, structured/text equality, decimal precision, rejection of inexact/underflowing balances, optional quantities, unknown codes, string/numeric upstream mutation types, invoice/mutation identity and lazy authentication. Oversized permission-denial bodies preserve status with no extra requests.
 - Invalid casing, types, operators, fields, limits, date/range/balance conditions and raw duplicate arguments cause **zero** session/GET requests.
 - Isolated Development user-secret loading without credential environment variables; Production missing-credential errors with empty stdout/static stderr; local startup validation and test-origin restrictions; rejected/malformed sessions; bounded unauthorized replay, permission denial, upstream validation/malformed responses and sanitized tool errors. Session POST failures are not retried. Redirects to a second fake server are not followed.
 - Concurrent cold calls share a single session; expired sessions share a refresh; a delayed old-token 401 cannot invalidate a newer session. Races use async gates. The expiry subprocess test has one 2.1-second wall-clock delay; detailed expiry boundaries remain covered with FakeTimeProvider in API tests.
