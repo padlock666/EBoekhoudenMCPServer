@@ -1,6 +1,6 @@
 # Architecture and interface decisions
 
-Status: phases 1–6 are implemented: scaffold, contracts/mappings/filters, authentication/HTTP infrastructure, typed read-only client, ten MCP tools, stdio executable and offline subprocess integration tests. Consult [STATUS.md](STATUS.md) for evidence and [tool-contracts.md](../tool-contracts.md) for the exact implemented contracts.
+Status: phases 1–7 are implemented: scaffold, contracts/mappings/filters, authentication/HTTP infrastructure, typed read-only client, ten MCP tools, stdio executable, offline subprocess integration tests, locked dependencies, local publish and CI configuration. Consult [STATUS.md](STATUS.md) for evidence and [tool-contracts.md](../tool-contracts.md) for the exact implemented contracts.
 
 ## Solution layout
 
@@ -71,7 +71,7 @@ Tools initially call the typed read client directly. Add query services only whe
 | Tests | `xunit.v3` and a compatible runner configuration |
 | Later HTTP transport | `ModelContextProtocol.AspNetCore` |
 
-Pin verified stable versions in `Directory.Packages.props`, SDK in `global.json`, and package resolution in lock files in phase 7. Do not assume package major versions all equal the target framework version.
+Verified stable versions are pinned centrally in `Directory.Packages.props`, the SDK in `global.json`, and resolution/content hashes in six per-project `packages.lock.json` files. Locked restore is enabled by default. Do not assume package major versions all equal the target framework version.
 
 ### Phase 1 package and runner decisions
 
@@ -192,6 +192,12 @@ Descriptions, notes, and other upstream free text are data, never instructions f
 Phase 6 tests launch an intact copy of the actual host build output with Process.Start and connect the official SDK StreamClientTransport to its redirected stdio. They compare all ten wire schemas, invoke all eleven GET routes against a local Kestrel fake, capture raw stdout/stderr separately and verify protocol/log isolation. Only the integration project references Microsoft.AspNetCore.App; production has no ASP.NET dependency. See [integration tests](../integration-tests.md) for configuration, cleanup, time bounds and platform evidence.
 
 The stdio host now observes ITransport.MessageReader.Completion through StdioDisconnectService. EOF stops the host immediately so SDK cancellation reaches pending HTTP operations; this fixes a subprocess regression where the SDK waited for handlers before stopping its hosted service. Tool/result/HTTP contracts and package pins are unchanged. Explicit cancellation notifications are verified across stdio and TCP; local SDK client cancellation alone did not reliably cause remote abort in the tested environment and is documented as a client compatibility limitation.
+
+## Delivery and CI
+
+Phase 7 selects GitHub Actions on Ubuntu 24.04 because no existing provider configuration was present. Full-SHA-pinned official checkout/setup actions run the shared `scripts/verify.sh` pipeline: locked restore, Release build, full offline tests, framework-dependent DLL publish to ignored artifacts/publish/stdio, and the same executable integration suite against that exact output. There is no deployment, package push or accounting secret in CI. See [delivery](../delivery.md) for the decision, dependency update procedure, primary references and unverified platforms/hosted-run scope.
+
+The artifact is untrimmed and RID-independent, with UseAppHost=false and no bundled runtime. It is launched through dotnet with an absolute published DLL path. The test harness's explicit EBOEKHOUDEN_TEST_HOST_DLL override validates the absolute DLL and companion dependency/runtime files before process creation; it does not affect production configuration or request restrictions. Isolated synthetic user-secret and Production missing-credential checks run against build and published artifacts. All package pins and API/MCP business contracts remain unchanged.
 
 ## References
 

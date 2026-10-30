@@ -7,13 +7,13 @@ The phase 6 suite launches the **actual compiled stdio host** as a child process
 Use the pinned .NET SDK **10.0.113** and the existing VSTest/xUnit v3 runner. The integration project's test-only `Microsoft.AspNetCore.App` framework reference requires the .NET 10 ASP.NET Core shared runtime, supplied by the SDK installation used here. No new NuGet package or production framework reference is introduced.
 
 ```sh
-dotnet restore EBoekhoudenMcp.sln
+dotnet restore EBoekhoudenMcp.sln --locked-mode
 dotnet build EBoekhoudenMcp.sln -c Release --no-restore
 dotnet test tests/EBoekhouden.IntegrationTests -c Release --no-build --no-restore
 dotnet test EBoekhoudenMcp.sln -c Release --no-build --no-restore
 ```
 
-Build first. The integration project copies the host's intact build output, including dependencies and runtime configuration, into its ignored `bin/.../StdioHost/` directory. Launching the host DLL from the test project's own output root would be incorrect: its ASP.NET framework reference can omit Extensions DLLs needed by the independently launched host. Tests run `dotnet <absolute host DLL>` directly, without restore/build output on the protocol stream. This is a build artifact test; publishing remains phase 7 work.
+Build first. The integration project copies the host's intact build output, including dependencies and runtime configuration, into its ignored `bin/.../StdioHost/` directory. Launching the host DLL from the test project's own output root would be incorrect: its ASP.NET framework reference can omit Extensions DLLs needed by the independently launched host. Tests run `dotnet <absolute host DLL>` directly, without restore/build output on the protocol stream. By default this tests the build artifact. Phase 7 also runs the same suite against the published DLL: set `EBOEKHOUDEN_TEST_HOST_DLL` to an absolute existing DLL path with its `.deps.json` and `.runtimeconfig.json` beside it. An invalid explicit path fails without falling back to build output. `scripts/verify.sh` clears an inherited override for the build tests, publishes locally, then sets this variable for the artifact tests; see [delivery](delivery.md).
 
 ## Explicit test configuration
 
@@ -26,14 +26,14 @@ EBoekhoudenTest__UpstreamOrigin=http://127.0.0.1:<OS_ASSIGNED_PORT>/
 
 The API registration validates a numeric IPv4/IPv6 loopback HTTP(S) origin, root path, and no query, fragment or user information. DNS hostnames such as localhost are rejected. IntegrationTest without an origin fails at startup; supplying the override in Production/Development also fails. Normal production always uses the fixed upstream origin. No tool accepts this setting, and no route/method/header/redirect restriction is bypassed.
 
-Each child receives a cleared environment with only necessary runtime/system paths and explicit synthetic options. It runs in a unique disposable empty directory, so user credentials, user secrets, appsettings and proxy configuration are not inherited. Synthetic session POST bodies and Bearer GET headers are checked by the fake server. Fixtures are linked from the clearly labeled invented API fixtures; no captured accounting data is used.
+Each child receives a cleared environment with only necessary runtime/system paths and explicit synthetic options. The Development secret-provider test supplies its own disposable APPDATA store and performs discovery only, with no accounting call against the production origin. It runs in a unique disposable empty directory, so user credentials, user secrets, appsettings and proxy configuration are not inherited. Synthetic session POST bodies and Bearer GET headers are checked by the fake server. Fixtures are linked from the clearly labeled invented API fixtures; no captured accounting data is used.
 
 ## Coverage
 
 - Initialization, discovery, exactly ten reviewed wire schemas and annotations; initialize revisions 2025-06-18/2025-11-25 and the SDK's 2026-07-28 discovery revision.
 - All ten tools and eleven GET routes, exact encoded requests, structured/text equality, decimal precision, optional quantities, unknown codes, invoice/mutation identity and lazy authentication.
 - Invalid casing, types, operators, fields, limits, date/range/balance conditions and raw duplicate arguments cause **zero** session/GET requests.
-- Local startup validation and test-origin restrictions; rejected/malformed sessions; bounded unauthorized replay, permission denial, upstream validation/malformed responses and sanitized tool errors. Session POST failures are not retried. Redirects to a second fake server are not followed.
+- Isolated Development user-secret loading without credential environment variables; Production missing-credential errors with empty stdout/static stderr; local startup validation and test-origin restrictions; rejected/malformed sessions; bounded unauthorized replay, permission denial, upstream validation/malformed responses and sanitized tool errors. Session POST failures are not retried. Redirects to a second fake server are not followed.
 - Concurrent cold calls share a single session; expired sessions share a refresh; a delayed old-token 401 cannot invalidate a newer session. Races use async gates. The expiry subprocess test has one 2.1-second wall-clock delay; detailed expiry boundaries remain covered with FakeTimeProvider in API tests.
 - Pagination returns candidate offsets without invented totals or automatic traversal. All/single balance calls preserve mode/dates and actual upstream values without aggregation.
 - Explicit cancellation notifications abort the actual TCP HTTP request. Local client cancellation is tested separately with an explicit subsequent notification; SDK 2.3.0 local cancellation alone did not reliably cause remote abort here. Subsequent tool calls remain usable.

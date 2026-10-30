@@ -30,6 +30,12 @@ internal sealed class StdioProcess : IAsyncDisposable
 
     private StdioProcess(Uri origin, IReadOnlyDictionary<string, string?>? environment)
     {
+        var hostDll = Environment.GetEnvironmentVariable("EBOEKHOUDEN_TEST_HOST_DLL")
+            ?? Path.Combine(AppContext.BaseDirectory, "StdioHost", "EBoekhouden.Host.Stdio.dll");
+        if (!Path.IsPathFullyQualified(hostDll) || !File.Exists(hostDll) ||
+            !File.Exists(Path.ChangeExtension(hostDll, ".deps.json")) ||
+            !File.Exists(Path.ChangeExtension(hostDll, ".runtimeconfig.json")))
+            throw new InvalidOperationException("Integration host DLL must be an absolute existing path with dependency and runtime files.");
         _deadline.CancelAfter(TimeSpan.FromSeconds(30));
         _directory = Path.Combine(Path.GetTempPath(), "eboekhouden-integration-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_directory);
@@ -39,7 +45,7 @@ internal sealed class StdioProcess : IAsyncDisposable
             RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
             CreateNoWindow = true,
         };
-        start.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "StdioHost", "EBoekhouden.Host.Stdio.dll"));
+        start.ArgumentList.Add(hostDll);
         // Do not inherit user credentials, secrets providers, proxies, or logging configuration.
         start.Environment.Clear();
         foreach (var key in new[] { "PATH", "SystemRoot", "DOTNET_ROOT", "DOTNET_ROOT_X64", "DOTNET_ROOT_ARM64", "TMP", "TEMP", "TMPDIR" })

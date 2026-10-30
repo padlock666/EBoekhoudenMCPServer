@@ -10,7 +10,7 @@ Last updated: 2026-10-30.
 - Phase 2 implements all core read DTOs, separate MCP request/result records, strict contract serialization, typed filters, endpoint query encoding, validation, and explicit mappings. See [tool-contracts.md](../tool-contracts.md).
 - Phase 3 implements lazy single-credential session authentication, separate restricted factory clients, validated configuration/startup hook, shared attempt/concurrency/time budgets and circuit breaking. See [HTTP infrastructure](../http-infrastructure.md).
 - Phase 4 implements IEBoekhoudenReadClient with all eleven typed GET operations, API-boundary response validation, disposal/cancellation and normalized safe errors. See [typed API client](../api-client.md).
-- The full offline suite contains 436 passing tests: 318 API, 86 MCP and 32 executable/protocol integration cases. Phase 6 uses actual child processes and a loopback Kestrel fake API.
+- The full offline suite contains 438 passing tests: 318 API, 86 MCP and 34 executable/protocol integration cases. Phase 7 additionally reruns all 34 integration cases against the actual local publish.
 - The workspace was not a Git repository at initial inspection. Git initialization is not required to begin implementation and has not been performed.
 - No live API behavior has been verified.
 
@@ -24,12 +24,12 @@ Last updated: 2026-10-30.
 | 4. API client | Complete | Eleven exact-request/typed-result endpoint fixtures; Release build: 0 warnings/errors; full offline suite: 318 API + 40 MCP tests pass |
 | 5. MCP tools and host | Complete | Official SDK ten-tool wire schemas/structured results verified; Generic Host and executable smoke checks; Release build 0 warnings/errors; 318 API + 86 MCP tests pass |
 | 6. Integration tests | Complete | Actual host/SDK stdio + loopback fake HTTP; 32 integration cases; full offline suite 436 passed; Release build 0 warnings/errors |
-| 7. Delivery and CI | Not started | Requirements recorded only |
+| 7. Delivery and CI | Complete | Six dependency locks; locked restore and clean Release build; 438 offline tests + 34 published-artifact cases pass; shared local/CI pipeline and GitHub Actions configuration |
 | 8. Independent review | Not started | Review prompt available |
 
 ## Next action
 
-Implement phase 7 from [PROMPTS.md](PROMPTS.md): delivery documentation, local ignored Release publish, published-artifact protocol verification with fake upstream, dependency locks and CI. Preserve offline defaults and the explicit IntegrationTest origin gate. No deployment, live API access, package publication or Git commits.
+Phase 8: independent review from [PROMPTS.md](PROMPTS.md) in a fresh session. Inspect the real code, package/lock graph, CI configuration and local published artifact; preserve offline defaults. Hosted Actions execution and live API compatibility are not claimed. No deployment, package publication or Git commits.
 
 ## Phase 1 validation evidence
 
@@ -226,6 +226,47 @@ SDK client local cancellation again did not cause timely remote HTTP abort in th
 Platform evidence: Linux x64, SDK 10.0.113, runtime 10.0.13. Tests need the ASP.NET Core 10 shared runtime (present here) and a resolvable dotnet host. Windows/macOS, IPv6 listeners and OS-signal shutdown were not run; EOF is the tested disconnect path. One subprocess expiry test waits 2.1 seconds on system time; race scheduling uses gates and API boundary timing remains covered with FakeTimeProvider. Captures remain in memory; no synthetic secrets are emitted into host logs/errors.
 
 No phase 6 blocker. Unrun: publishing/CI/locks and published-artifact smoke (phase 7), independent review (phase 8), live compatibility (not authorized). No deployment, package publication, database or Git operations. Next action: phase 7.
+
+## Phase 7 handoff — 2026-10-30
+
+Implemented:
+
+- Expanded README with verified SDK/runtime/runner requirements, locked restore/build/test/publish commands, environment/user-secret setup, absolute published-DLL MCP client configuration, all ten tool examples, operators/pagination, accounting/identity/precision limits, safe errors and troubleshooting. Development documentation index preserved; [delivery decisions](../delivery.md) and runtime/integration/architecture/compatibility notes updated.
+- Six SDK-generated packages.lock.json files; RestorePackagesWithLockFile and RestoreLockedMode enabled centrally. Pins unchanged. Intentional updates require explicit unlocked regeneration and lock review.
+- No prior CI configuration was present; documented GitHub Actions/Ubuntu 24.04 before adding .github/workflows/verify.yml. Official checkout v6 and setup-dotnet v5 tag SHAs/metadata verified and pinned; contents-read permission, no persisted checkout credential, SDK from global.json, VSTest and lock-keyed package cache. Shared scripts/verify.sh runs restore/build/tests/local publish and published-artifact tests. No deploy/push/upload step or accounting credential.
+- Local ignored artifact at artifacts/publish/stdio/EBoekhouden.Host.Stdio.dll, framework-dependent, untrimmed, no RID/apphost, no bundled runtime. Runtime configuration requires Microsoft.NETCore.App only; no test assemblies/xUnit in publish output.
+- Integration harness accepts an explicit absolute EBOEKHOUDEN_TEST_HOST_DLL with required companion files, failing instead of falling back. Two new cases prove isolated Development user-secret loading and Production missing-credential stderr behavior. All existing integration cases also run against the exact publish, retaining synthetic loopback API, capture/redaction, cancellation and cleanup.
+
+Commands actually executed:
+
+```sh
+export DOTNET_CLI_HOME=/tmp/eboekhouden-dotnet
+export NUGET_PACKAGES=/tmp/eboekhouden-nuget
+# Initial lock generation only:
+dotnet restore EBoekhoudenMcp.sln -p:RestoreLockedMode=false --force-evaluate --disable-parallel -m:1 -nr:false
+# Final pipeline, shared verbatim with CI:
+bash scripts/verify.sh
+bash -n scripts/verify.sh
+sha256sum e-boekhouden-api-v1.yaml
+```
+
+The final script executes:
+
+```sh
+dotnet restore EBoekhoudenMcp.sln --locked-mode --disable-parallel -m:1 -nr:false
+dotnet build EBoekhoudenMcp.sln -c Release --no-restore -m:1 -nr:false
+dotnet test EBoekhoudenMcp.sln -c Release --no-build --no-restore -m:1 -nr:false --logger 'console;verbosity=minimal'
+dotnet publish src/EBoekhouden.Host.Stdio/EBoekhouden.Host.Stdio.csproj -c Release --no-restore --no-self-contained -p:UseAppHost=false -o "$PWD/artifacts/publish/stdio" -m:1 -nr:false
+EBOEKHOUDEN_TEST_HOST_DLL="$PWD/artifacts/publish/stdio/EBoekhouden.Host.Stdio.dll" dotnet test tests/EBoekhouden.IntegrationTests -c Release --no-build --no-restore -m:1 -nr:false --logger 'console;verbosity=minimal'
+```
+
+Results: lock generation and final pipeline each exit 0. Final locked restore succeeds; Release build **0 warnings / 0 errors**; full suite **318 API + 86 MCP + 34 integration = 438 passed, 0 failed, 0 skipped**; publish exit 0; **all 34 integration cases pass again against the published DLL**, including initialization, every tool/schema, fake accounting calls, Development secrets and Production configuration errors on stderr/empty stdout. Earlier pipeline with 33 integration cases also passed before the additional Production check. Six lock-file SHA256 values are unchanged by the final locked pipeline. No test failure remains.
+
+Additional checks: bash syntax passes; workflow YAML parsed with PyYAML 6.0.1 and checked for event names, read-only permissions, Ubuntu runner, full action SHAs and the shared entry point. All ten README argument examples validate against reviewed SDK schemas using the existing /tmp jsonschema 4.23.0 audit installation. A /tmp-only copied graph with Microsoft.Extensions.Http changed from 10.0.13 to 10.0.12 failed locked restore as expected (exit 1, NU1004); the repository pin/locks were untouched. Audit metadata was disabled only for that isolated negative control; normal pipeline audit settings were retained. git check-ignore confirms the publish DLL is ignored. No integration scratch/isolated secret directories remain.
+
+Environment/evidence limits: Linux x64, SDK 10.0.113, runtime 10.0.13. Restore/action metadata lookup used approved public network access; test execution required approved VSTest/loopback socket permission. No current environment blocker. GitHub hosted checkout/setup/cache/job execution has not been run; only the identical pipeline commands and workflow structure were verified locally. Windows/macOS, RID-specific/self-contained outputs and OS-signal shutdown remain unrun. No live accounting API calls, deployment, package publication, Git initialization/staging/commits or real secret/data files were introduced.
+
+OpenAPI SHA256 remains `b883304a41219a15395fde37110db3a6ea3c0d82a467e7c4123abb0e04b72ca9`. Existing live auth/response/expiry assumptions, mutation-width mismatch and SDK local-cancellation caveat remain open. No remaining phase 7 blocker. Next action: phase 8 independent review in a fresh session; do not call the release independently reviewed yet.
 
 ## Handoff template
 

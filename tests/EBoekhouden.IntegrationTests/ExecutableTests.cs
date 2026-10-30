@@ -8,6 +8,31 @@ namespace EBoekhouden.IntegrationTests;
 
 public sealed class ExecutableTests
 {
+    [Fact]
+    public async Task DevelopmentUserSecretsAllowOfflineStartupWithoutCredentialEnvironmentVariables()
+    {
+        var appData = Path.Combine(Path.GetTempPath(), "eboekhouden-secrets-test-" + Guid.NewGuid().ToString("N"));
+        var secrets = Path.Combine(appData, "Microsoft", "UserSecrets", "EBoekhoudenMcp.Host.Stdio-83bf70f6-3715-4ca8-9691-16bd407fb162");
+        Directory.CreateDirectory(secrets);
+        try
+        {
+            await File.WriteAllTextAsync(Path.Combine(secrets, "secrets.json"), JsonSerializer.Serialize(new Dictionary<string, string>
+            { ["EBoekhouden:AccessToken"] = FakeUpstream.Credential, ["EBoekhouden:Source"] = "Tests" }), TestContext.Current.CancellationToken);
+            await using var api = await FakeUpstream.StartAsync();
+            await using var host = StdioProcess.Start(api.Origin, new Dictionary<string, string?>
+            {
+                ["APPDATA"] = appData, ["DOTNET_ENVIRONMENT"] = "Development",
+                ["EBoekhoudenTest__UpstreamOrigin"] = null, ["EBoekhouden__AccessToken"] = null, ["EBoekhouden__Source"] = null,
+            });
+            await host.ConnectAsync();
+            Assert.Equal(10, (await host.Client.ListToolsAsync(cancellationToken: host.Token)).Count);
+            // Discovery only: no accounting tool is invoked against the fixed production origin.
+            Assert.Empty(api.Requests);
+            await host.CloseInputAndWaitAsync(); host.AssertCleanOutput(); api.AssertHealthy();
+        }
+        finally { Directory.Delete(appData, recursive: true); }
+    }
+
     [Theory]
     [InlineData("2025-06-18")]
     [InlineData("2026-07-28")]
@@ -120,6 +145,7 @@ public sealed class ExecutableTests
 
     [Theory]
     [InlineData("missing-credential")]
+    [InlineData("production-missing-credential")]
     [InlineData("bad-source")]
     [InlineData("bad-binding")]
     [InlineData("production-override")]
@@ -137,6 +163,11 @@ public sealed class ExecutableTests
         switch (scenario)
         {
             case "missing-credential": environment["EBoekhouden__AccessToken"] = ""; break;
+            case "production-missing-credential":
+                environment["DOTNET_ENVIRONMENT"] = "Production";
+                environment["EBoekhoudenTest__UpstreamOrigin"] = null;
+                environment["EBoekhouden__AccessToken"] = "";
+                break;
             case "bad-source": environment["EBoekhouden__Source"] = FakeUpstream.PrivateData; break;
             case "bad-binding": environment["EBoekhouden__MaxReadAttempts"] = FakeUpstream.PrivateData; break;
             case "production-override": environment["DOTNET_ENVIRONMENT"] = "Production"; break;
