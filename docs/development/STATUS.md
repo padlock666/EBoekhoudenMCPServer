@@ -1,6 +1,6 @@
 # Development status and handoff
 
-Last updated: 2026-10-29.
+Last updated: 2026-10-30.
 
 ## Current state
 
@@ -10,7 +10,7 @@ Last updated: 2026-10-29.
 - Phase 2 implements all core read DTOs, separate MCP request/result records, strict contract serialization, typed filters, endpoint query encoding, validation, and explicit mappings. See [tool-contracts.md](../tool-contracts.md).
 - Phase 3 implements lazy single-credential session authentication, separate restricted factory clients, validated configuration/startup hook, shared attempt/concurrency/time budgets and circuit breaking. See [HTTP infrastructure](../http-infrastructure.md).
 - Phase 4 implements IEBoekhoudenReadClient with all eleven typed GET operations, API-boundary response validation, disposal/cancellation and normalized safe errors. See [typed API client](../api-client.md).
-- API and MCP projects now contain 404 passing offline synthetic tests (318 API, 86 MCP). IntegrationTests remains intentionally empty until phase 6.
+- The full offline suite contains 436 passing tests: 318 API, 86 MCP and 32 executable/protocol integration cases. Phase 6 uses actual child processes and a loopback Kestrel fake API.
 - The workspace was not a Git repository at initial inspection. Git initialization is not required to begin implementation and has not been performed.
 - No live API behavior has been verified.
 
@@ -23,13 +23,13 @@ Last updated: 2026-10-29.
 | 3. Authentication and HTTP | Complete | Restore and Release build succeed, 0 warnings/errors; full offline suite: 171 API + 40 MCP tests pass |
 | 4. API client | Complete | Eleven exact-request/typed-result endpoint fixtures; Release build: 0 warnings/errors; full offline suite: 318 API + 40 MCP tests pass |
 | 5. MCP tools and host | Complete | Official SDK ten-tool wire schemas/structured results verified; Generic Host and executable smoke checks; Release build 0 warnings/errors; 318 API + 86 MCP tests pass |
-| 6. Integration tests | Not started | Test requirements recorded only |
+| 6. Integration tests | Complete | Actual host/SDK stdio + loopback fake HTTP; 32 integration cases; full offline suite 436 passed; Release build 0 warnings/errors |
 | 7. Delivery and CI | Not started | Requirements recorded only |
 | 8. Independent review | Not started | Review prompt available |
 
 ## Next action
 
-Implement phase 6 from [PROMPTS.md](PROMPTS.md): persistent subprocess integration tests using the official SDK client and an explicitly isolated fake upstream, including full lifecycle, cancellation and redaction. Preserve the fixed production origin and code-only test overrides. Investigate SDK client local-cancellation forwarding separately from server handling, which is verified with explicit protocol notifications. No live API access.
+Implement phase 7 from [PROMPTS.md](PROMPTS.md): delivery documentation, local ignored Release publish, published-artifact protocol verification with fake upstream, dependency locks and CI. Preserve offline defaults and the explicit IntegrationTest origin gate. No deployment, live API access, package publication or Git commits.
 
 ## Phase 1 validation evidence
 
@@ -194,6 +194,38 @@ The one-off subprocess smoke (`/tmp/eboekhouden-phase5-smoke.py`, synthetic envi
 An initial SDK-client local-cancellation test timed out waiting for server-side cancellation, while an explicit notifications/cancelled message with a known request ID reaches the HTTP handler correctly. The committed test verifies the actual protocol notification and cancellation propagation. Client local-token forwarding remains a compatibility investigation for phase 6; do not equate local task cancellation with receipt of a remote notification. No current test failures or remaining phase 5 blockers.
 
 OpenAPI SHA256 remains `b883304a41219a15395fde37110db3a6ea3c0d82a467e7c4123abb0e04b72ca9`. No real secrets/financial records, Git operations, deployment or publication. Unrun: live compatibility (not authorized), dedicated fake-upstream subprocess integration suite (phase 6), publishing/CI/lock files (phase 7). Next action: phase 6.
+
+## Phase 6 handoff — 2026-10-30
+
+Implemented:
+
+- Actual compiled host child processes connected through official MCP SDK 2.3.0 StreamClientTransport, with a real Kestrel fake bound atomically to 127.0.0.1:0. Synthetic credentials/fixtures only; child environments are cleared and scratch working directories isolated. Test-only Microsoft.AspNetCore.App framework reference; no package pin or production framework change.
+- Explicit executable gate: DOTNET_ENVIRONMENT=IntegrationTest plus EBoekhoudenTest__UpstreamOrigin, validated through the existing numeric-loopback-only API registration. Missing/invalid origin or an override outside IntegrationTest fails before network access. Production origin, route/method guards, auth and redirect restrictions remain intact.
+- 32 integration cases: initialization/discovery across three protocol revisions, exactly ten snapshot schemas, all eleven routes/structured results, zero HTTP for invalid arguments, startup/session/upstream failures and redaction, cold/expired/concurrent refresh and late stale 401, pagination, both balance modes/scopes, redirects, cancellation, pending/idle EOF and cleanup after protocol failure. Raw stdout and stderr are captured separately and checked independently of SDK parsing.
+- Fixed a real EOF shutdown regression: SDK 2.3.0 waits for handlers before its single-session hosted service stops the host. New StdioDisconnectService observes transport reader completion and stops Generic Host, canceling pending HTTP. The regression requires HTTP abort and normal exit within five seconds. Test cleanup has bounded waits, process-tree kill/reap fallback, socket disposal and scratch removal; a failure-path test verifies process exit and immediate port reuse.
+
+Files: HostComposition and new StdioDisconnectService; integration project plus FakeUpstream, StdioProcess, ExecutableTests and ConcurrencyTests; [integration guide](../integration-tests.md), README, runtime/infrastructure/architecture/compatibility notes and status. OpenAPI and package pins unchanged.
+
+Exact final successful commands:
+
+```sh
+export DOTNET_CLI_HOME=/tmp/eboekhouden-dotnet
+export NUGET_PACKAGES=/tmp/eboekhouden-nuget
+dotnet restore EBoekhoudenMcp.sln --force --no-http-cache --disable-parallel -m:1 -nr:false
+dotnet build EBoekhoudenMcp.sln -c Release --no-restore -m:1 -nr:false
+dotnet test EBoekhoudenMcp.sln -c Release --no-build --no-restore -m:1 -nr:false --logger 'console;verbosity=minimal'
+sha256sum e-boekhouden-api-v1.yaml
+```
+
+Results: restore exit 0 without warnings; final Release build exit 0, **0 warnings / 0 errors**; full suite exit 0, **318 API + 86 MCP + 32 integration = 436 passed, 0 failed, 0 skipped**. A preceding focused integration run passed 27 cases before the additional protocol/origin checks. Default test execution makes only loopback requests; no live API was contacted. OpenAPI SHA256 remains `b883304a41219a15395fde37110db3a6ea3c0d82a467e7c4123abb0e04b72ca9`.
+
+Resolved implementation/environment issues: restricted restore cached NU1900 audit-metadata failures; approved forced restore without HTTP cache resolved them. VSTest and the fake HTTP server require approved local socket/bind access in this sandbox. The ASP.NET test framework reference pruned Extensions DLLs from the test output root, so launching that copy failed; the build now copies the host's intact own output into ignored StdioHost/ and launches it with its own deps/runtime files. An intermediate MSBuild metadata/path error was corrected with an explicit nonempty-directory guard. No build/test failures remain.
+
+SDK client local cancellation again did not cause timely remote HTTP abort in the initial subprocess test. The suite explicitly sends notifications/cancelled with a known request ID and verifies TCP abort plus later successful calls; local task cancellation alone is not counted as remote cancellation evidence. This client compatibility limitation is documented; no SDK version/third-party code was changed. Server cancellation and EOF shutdown are verified.
+
+Platform evidence: Linux x64, SDK 10.0.113, runtime 10.0.13. Tests need the ASP.NET Core 10 shared runtime (present here) and a resolvable dotnet host. Windows/macOS, IPv6 listeners and OS-signal shutdown were not run; EOF is the tested disconnect path. One subprocess expiry test waits 2.1 seconds on system time; race scheduling uses gates and API boundary timing remains covered with FakeTimeProvider. Captures remain in memory; no synthetic secrets are emitted into host logs/errors.
+
+No phase 6 blocker. Unrun: publishing/CI/locks and published-artifact smoke (phase 7), independent review (phase 8), live compatibility (not authorized). No deployment, package publication, database or Git operations. Next action: phase 7.
 
 ## Handoff template
 

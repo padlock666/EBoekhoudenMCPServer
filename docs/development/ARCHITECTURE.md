@@ -1,6 +1,6 @@
 # Architecture and interface decisions
 
-Status: phases 1–4 are implemented: scaffold, contracts/mappings/filters, authentication/HTTP infrastructure, and typed read-only client with normalized errors. Tools and executable hosting below remain proposed. Consult [STATUS.md](STATUS.md) for evidence and [tool-contracts.md](../tool-contracts.md) for the exact implemented contracts.
+Status: phases 1–6 are implemented: scaffold, contracts/mappings/filters, authentication/HTTP infrastructure, typed read-only client, ten MCP tools, stdio executable and offline subprocess integration tests. Consult [STATUS.md](STATUS.md) for evidence and [tool-contracts.md](../tool-contracts.md) for the exact implemented contracts.
 
 ## Solution layout
 
@@ -84,7 +84,7 @@ Pin verified stable versions in `Directory.Packages.props`, SDK in `global.json`
 
 Version-specific SDK verification: [v2.3.0 getting started](https://github.com/modelcontextprotocol/csharp-sdk/blob/v2.3.0/docs/concepts/getting-started.md) documents `AddMcpServer`, `WithStdioServerTransport`, and stderr console logging. Phase 5 implements these APIs and verifies the tagged SDK source, actual schemas and protocol results. The explicit delegate catalog uses `McpServerTool.Create`, `McpServerToolCreateOptions.UseStructuredContent` and `DelegatingMcpServerTool`; see [MCP runtime](../mcp-runtime.md).
 
-Runner guidance: [xUnit VSTest/MTP documentation](https://xunit.net/docs/getting-started/v3/microsoft-testing-platform) explains the VSTest adapter path. Stable package metadata was checked for [xunit.v3 3.2.2](https://www.nuget.org/packages/xunit.v3/3.2.2), [adapter 3.1.5](https://www.nuget.org/packages/xunit.runner.visualstudio/3.1.5), and [Test SDK 18.0.1](https://www.nuget.org/packages/Microsoft.NET.Test.Sdk/18.0.1). Restore, Release compilation, and adapter discovery verify the selected combination locally. Phase 2 adds meaningful offline contract tests; integration tests remain phase 6 work.
+Runner guidance: [xUnit VSTest/MTP documentation](https://xunit.net/docs/getting-started/v3/microsoft-testing-platform) explains the VSTest adapter path. Stable package metadata was checked for [xunit.v3 3.2.2](https://www.nuget.org/packages/xunit.v3/3.2.2), [adapter 3.1.5](https://www.nuget.org/packages/xunit.runner.visualstudio/3.1.5), and [Test SDK 18.0.1](https://www.nuget.org/packages/Microsoft.NET.Test.Sdk/18.0.1). Restore, Release compilation, and adapter discovery verify the selected combination locally. Meaningful offline tests now include API/contract tests, SDK tool tests, and phase 6 executable integration tests.
 
 Use `ILogger<T>` initially. All stdio diagnostics must use stderr. OpenTelemetry is optional for later deployment; exporters must not corrupt stdout or expose financial data.
 
@@ -169,7 +169,7 @@ Enforce exact approved methods, routes, and origin immediately before dispatch. 
 
 See [HTTP infrastructure](../http-infrastructure.md) for exact registration, external configuration, defaults, limits, circuit policy, request allowlist, timeout ownership, and test seams. Production uses two named factory clients with redirects/cookies disabled and all HTTP factory loggers removed. Session POSTs have no retry policy; one shared read loop owns the complete GET attempt budget, including one optional 401 replay. Default budget is three GET attempts and a 30-second operation deadline including queue/token waits, buffering and backoff. Token refresh uses a cancellation-aware lock and atomic lease-identity invalidation.
 
-The planned Http.Resilience/DataAnnotations dependencies were replaced by this explicit bounded policy and IValidateOptions validator to avoid multiple retry owners and keep configuration validation local. Production origin is fixed; the code-only test registration accepts numeric loopback origins only. ValidateOnStart is registered and tested both through IStartupValidator and actual Generic Host startup. Development user-secret metadata is present in the host project, with setup instructions in the infrastructure document.
+The planned Http.Resilience/DataAnnotations dependencies were replaced by this explicit bounded policy and IValidateOptions validator to avoid multiple retry owners and keep configuration validation local. Production origin is fixed; the alternate API test registration accepts numeric loopback origins only. The executable selects it only in explicit IntegrationTest configuration with a validated test origin; all other environment/override combinations fail closed. ValidateOnStart is registered and tested both through IStartupValidator and actual Generic Host startup. Development user-secret metadata is present in the host project, with setup instructions in the infrastructure document.
 
 ### Implemented phase 4 client
 
@@ -186,6 +186,12 @@ ApiException uses fixed local messages, actual HTTP status and optional bounded/
 Return structured results plus compatible text content as supported by the SDK. Invalid input must not reach the upstream service. API failures must not look like successful empty pages. Preserve useful error codes/status/trace IDs, while sanitizing potentially sensitive messages.
 
 Descriptions, notes, and other upstream free text are data, never instructions for the server or caller.
+
+## Executable integration and disconnect handling
+
+Phase 6 tests launch an intact copy of the actual host build output with Process.Start and connect the official SDK StreamClientTransport to its redirected stdio. They compare all ten wire schemas, invoke all eleven GET routes against a local Kestrel fake, capture raw stdout/stderr separately and verify protocol/log isolation. Only the integration project references Microsoft.AspNetCore.App; production has no ASP.NET dependency. See [integration tests](../integration-tests.md) for configuration, cleanup, time bounds and platform evidence.
+
+The stdio host now observes ITransport.MessageReader.Completion through StdioDisconnectService. EOF stops the host immediately so SDK cancellation reaches pending HTTP operations; this fixes a subprocess regression where the SDK waited for handlers before stopping its hosted service. Tool/result/HTTP contracts and package pins are unchanged. Explicit cancellation notifications are verified across stdio and TCP; local SDK client cancellation alone did not reliably cause remote abort in the tested environment and is documented as a client compatibility limitation.
 
 ## References
 

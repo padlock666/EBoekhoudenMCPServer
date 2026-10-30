@@ -2,7 +2,7 @@
 
 C#/.NET 10 implementation of a read-only Model Context Protocol server for the supplied [e-Boekhouden OpenAPI specification](e-boekhouden-api-v1.yaml).
 
-**Current state: phase 5 tools and stdio executable.** Exactly ten read-only MCP tools are registered through the official C# SDK 2.3.0, backed by eleven typed GET operations. The Generic Host validates external configuration at startup and authenticates lazily. Diagnostics go to stderr; stdout is reserved for MCP protocol traffic.
+**Current state: phase 6 executable and protocol integration tests.** Exactly ten read-only MCP tools are registered through the official C# SDK 2.3.0, backed by eleven typed GET operations. The Generic Host validates external configuration at startup and authenticates lazily. Diagnostics go to stderr; stdout is reserved for MCP protocol traffic.
 
 ## Build and test
 
@@ -17,9 +17,9 @@ dotnet test EBoekhoudenMcp.sln -c Release --no-build --no-restore --list-tests -
 dotnet test EBoekhoudenMcp.sln -c Release --no-build --no-restore
 ```
 
-Tests use **xunit.v3 3.2.2**, **xunit.runner.visualstudio 3.1.5**, and **Microsoft.NET.Test.Sdk 18.0.1**. `global.json` explicitly selects **VSTest** for `dotnet test`; do not use Microsoft.Testing.Platform-only CLI options. xUnit v3 test projects are executables with generated entry points. API and MCP tests reference their respective libraries; integration tests reference the host and official MCP SDK for later subprocess tests.
+Tests use **xunit.v3 3.2.2**, **xunit.runner.visualstudio 3.1.5**, and **Microsoft.NET.Test.Sdk 18.0.1**. `global.json` explicitly selects **VSTest** for `dotnet test`; do not use Microsoft.Testing.Platform-only CLI options. xUnit v3 test projects are executables with generated entry points. API and MCP tests reference their respective libraries; integration tests build the host and use the official MCP client SDK against its actual child process. Their test-only ASP.NET Core framework reference supplies the loopback Kestrel fake upstream.
 
-API and MCP tests cover filters, encoding, contracts, validation, precision, dates, pagination, token races, cancellation, retries, concurrency, HTTP restrictions, exact endpoint requests/responses, nullable fields and safe error normalization with synthetic offline data. The integration project intentionally has no tests until phase 6 and reports no tests available. Default tests must never call the live API. The [tool contracts](docs/tool-contracts.md) document the ten callable tools, and [reviewed schemas](docs/tool-schemas.json) are checked against actual SDK `tools/list` output. Tool tests use the SDK client with fake upstream handlers; the phase 6 subprocess integration suite remains pending.
+API and MCP tests cover filters, encoding, contracts, validation, precision, dates, pagination, token races, cancellation, retries, concurrency, HTTP restrictions, exact endpoint requests/responses, nullable fields and safe error normalization with synthetic offline data. The integration project tests actual subprocess stdio with a loopback fake HTTP server, including schemas, results/errors, token refresh races, cancellation and cleanup. Default tests must never call the live API. The [tool contracts](docs/tool-contracts.md) document the ten callable tools, and [reviewed schemas](docs/tool-schemas.json) are checked against actual SDK `tools/list` output. Tool tests use the SDK client with fake upstream handlers; the subprocess suite also checks the real executable. See [integration tests](docs/integration-tests.md) for isolation, test configuration and platform requirements.
 
 Restore needs access to NuGet (or a populated package cache). Restricted environments may need a writable `DOTNET_CLI_HOME` and `NUGET_PACKAGES`, plus `-m:1 -nr:false` for MSBuild. VSTest needs local socket access even for offline discovery. See [STATUS.md](docs/development/STATUS.md) for exact verified commands and environment limitations.
 
@@ -79,6 +79,7 @@ Run one phase at a time. If a phase is partly implemented, continue that phase i
 | [Status](docs/development/STATUS.md) | Progress and cross-session handoff |
 | [Tool contracts](docs/tool-contracts.md) | Exact inputs, outputs, query mapping, and accounting limitations |
 | [HTTP infrastructure](docs/http-infrastructure.md) | Authentication, external configuration, request restrictions, timeout/retry budgets, and test seams |
+| [Integration tests](docs/integration-tests.md) | Real executable, loopback fake API, cancellation, capture and cleanup |
 | [MCP runtime](docs/mcp-runtime.md) | Tool registration, schemas, errors, host lifecycle and logging |
 | [Typed API client](docs/api-client.md) | Eleven GET methods, response validation/nullability, errors, and synthetic fixture evidence |
 

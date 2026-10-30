@@ -5,10 +5,30 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/EBoekhouden.Host.Stdio/EBoekhouden.Host.Stdio.csproj" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../../src/EBoekhouden.Host.Stdio/EBoekhouden.Host.Stdio.csproj" ReferenceOutputAssembly="false" />
     <PackageReference Include="ModelContextProtocol" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../EBoekhouden.Api.Tests/Fixtures/*.json" Link="Fixtures/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="../../docs/tool-schemas.json" Link="tool-schemas.json" />
+  </ItemGroup>
+  <!-- The test framework's ASP.NET reference prunes Extensions package DLLs from its own output.
+       Launch an intact copy of the host's real build output with its own runtime/dependency files. -->
+  <Target Name="CopyStdioHostForIntegrationTests" AfterTargets="Build">
+    <MSBuild Projects="../../src/EBoekhouden.Host.Stdio/EBoekhouden.Host.Stdio.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration);TargetFramework=$(TargetFramework)">
+      <Output TaskParameter="TargetOutputs" ItemName="_StdioHostTarget" />
+    </MSBuild>
+    <PropertyGroup>
+      <_StdioHostDirectory>@(_StdioHostTarget->'%(RootDir)%(Directory)')</_StdioHostDirectory>
+    </PropertyGroup>
+    <Error Condition="'$(_StdioHostDirectory)' == ''" Text="The stdio host build output directory could not be resolved." />
+    <ItemGroup>
+      <_StdioHostFiles Include="$(_StdioHostDirectory)/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_StdioHostFiles)" DestinationFiles="@(_StdioHostFiles->'$(OutDir)StdioHost/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
 </Project>

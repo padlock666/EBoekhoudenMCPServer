@@ -84,7 +84,7 @@ GET /v1/ledger/balances
 GET /v1/ledger/{int32}/balance
 ```
 
-Production origin is fixed to `https://api.e-boekhouden.nl/`; configuration cannot replace it. `AddEBoekhoudenApiForTesting` is an explicit code-only alternate registration restricted to numeric IPv4/IPv6 loopback HTTP(S) origins with root path and no query, fragment, or user information. There is no configuration/environment flag that silently enables the override. Offline unit tests replace the primary handlers with synthetic fakes, while retaining the real guards, factory, cache, timeout and retry code. Phase 6 may explicitly use the loopback registration for subprocess integration.
+Production origin is fixed to `https://api.e-boekhouden.nl/`. `AddEBoekhoudenApiForTesting` is an explicit alternate registration restricted to numeric IPv4/IPv6 loopback HTTP(S) origins with root path and no query, fragment, or user information. Offline unit tests invoke it in code and replace only primary handlers. The phase 6 executable seam requires **both** `DOTNET_ENVIRONMENT=IntegrationTest` and `EBoekhoudenTest__UpstreamOrigin` set to an accepted loopback origin. IntegrationTest without an origin, or an origin override in any other environment, fails at startup without network access. The production origin is never replaced by a general URL setting. The test seam retains the exact method/route/origin guards, redirect restrictions, factory, cache, timeout and retry code. See [integration tests](integration-tests.md).
 
 ## Diagnostics and dependencies
 

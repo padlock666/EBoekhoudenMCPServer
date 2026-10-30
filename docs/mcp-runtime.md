@@ -26,13 +26,13 @@ Cancellation tokens flow from the SDK handler through the tool and typed HTTP st
 
 ## Host lifecycle and diagnostics
 
-Use the [README client example](../README.md#run-with-an-mcp-client) and [external options setup](http-infrastructure.md). Normal environment and development user-secret providers supply configuration. Validation occurs at startup without HTTP; malformed binding or missing options produce exit 1 with a static stderr message. Tokens are obtained only for a valid accounting call. The SDK stops the single session on stdin EOF; Generic Host handles termination signals and has a ten-second shutdown timeout.
+Use the [README client example](../README.md#run-with-an-mcp-client) and [external options setup](http-infrastructure.md). Normal environment and development user-secret providers supply configuration. Validation occurs at startup without HTTP; malformed binding or missing options produce exit 1 with a static stderr message. Tokens are obtained only for a valid accounting call. `StdioDisconnectService` observes the SDK transport reader completion and stops Generic Host on EOF or transport failure, canceling pending HTTP operations. This avoids SDK 2.3.0 waiting for in-flight handlers before its single-session service stops the host. Generic Host also handles termination signals and has a ten-second shutdown timeout; the pending-call EOF integration test requires normal exit within five seconds.
 
 All console logging is forced to stderr even if configuration requests another threshold. The host blocks `ModelContextProtocol` logs because SDK Trace can include financial arguments/results. It also blocks Generic Host internal startup exception logging because binding errors can include configuration values; the entry point emits a static diagnostic instead. HTTP factory logging remains disabled. The host neither configures telemetry exporters nor writes startup banners to stdout.
 
 ## Verification and version references
 
-Offline tests exercise all ten tools and eleven underlying routes through the official SDK client, with real API/authentication infrastructure and synthetic fake primary handlers. They verify exact requests, typed mappings, structured/text equality, safe failures, validation before network, raw duplicate arguments, cancellation notifications, actual schemas, lazy Generic Host startup and shutdown, and protected logger settings. The dedicated phase 6 subprocess integration suite is still pending.
+Offline tests exercise all ten tools and eleven underlying routes through the official SDK client, with real API/authentication infrastructure and synthetic fake primary handlers. They verify exact requests, typed mappings, structured/text equality, safe failures, validation before network, raw duplicate arguments, cancellation notifications, actual schemas, lazy Generic Host startup and shutdown, and protected logger settings. The [phase 6 subprocess suite](integration-tests.md) additionally uses the actual executable and real loopback HTTP with synthetic fixtures, including expiry/refresh races, cancellation and cleanup.
 
 The implementation was checked against tagged official SDK documentation/source:
 
@@ -42,4 +42,4 @@ The implementation was checked against tagged official SDK documentation/source:
 - [DelegatingMcpServerTool](https://github.com/modelcontextprotocol/csharp-sdk/blob/v2.3.0/src/ModelContextProtocol.Core/Server/DelegatingMcpServerTool.cs)
 - [Explicit primitive collection in DI](https://github.com/modelcontextprotocol/csharp-sdk/blob/v2.3.0/src/ModelContextProtocol/McpServerOptionsSetup.cs)
 
-See [STATUS.md](development/STATUS.md) for executed commands, counts and limitations. No live API compatibility, deployment, publication or phase 6 completion is implied.
+See [STATUS.md](development/STATUS.md) for executed commands, counts and limitations. No live API compatibility, deployment or publication is implied.
