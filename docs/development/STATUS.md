@@ -6,11 +6,11 @@ Last updated: 2026-10-29.
 
 - Phase 1 scaffold is implemented: conventional solution, six SDK-style projects, shared build settings, central package versions, SDK pin, formatting and ignore rules.
 - `e-boekhouden-api-v1.yaml` is the upstream contract source.
-- All projects target `net10.0`. Release build succeeds with zero warnings/errors. The executable only reports the unfinished host on stderr and exits 1; MCP tools and executable transport are not wired yet.
+- All projects target `net10.0`. Release build succeeds with zero warnings/errors. Phase 5 wires the working Generic Host/stdin-stdout executable and exactly ten approved MCP tools.
 - Phase 2 implements all core read DTOs, separate MCP request/result records, strict contract serialization, typed filters, endpoint query encoding, validation, and explicit mappings. See [tool-contracts.md](../tool-contracts.md).
 - Phase 3 implements lazy single-credential session authentication, separate restricted factory clients, validated configuration/startup hook, shared attempt/concurrency/time budgets and circuit breaking. See [HTTP infrastructure](../http-infrastructure.md).
 - Phase 4 implements IEBoekhoudenReadClient with all eleven typed GET operations, API-boundary response validation, disposal/cancellation and normalized safe errors. See [typed API client](../api-client.md).
-- API and MCP projects now contain 358 passing offline synthetic tests (318 API, 40 MCP). IntegrationTests remains intentionally empty until phase 6.
+- API and MCP projects now contain 404 passing offline synthetic tests (318 API, 86 MCP). IntegrationTests remains intentionally empty until phase 6.
 - The workspace was not a Git repository at initial inspection. Git initialization is not required to begin implementation and has not been performed.
 - No live API behavior has been verified.
 
@@ -22,14 +22,14 @@ Last updated: 2026-10-29.
 | 2. Contracts and filters | Complete | Release build: 0 warnings/errors; 48 API and 40 MCP tests pass; exact ten-tool contracts documented |
 | 3. Authentication and HTTP | Complete | Restore and Release build succeed, 0 warnings/errors; full offline suite: 171 API + 40 MCP tests pass |
 | 4. API client | Complete | Eleven exact-request/typed-result endpoint fixtures; Release build: 0 warnings/errors; full offline suite: 318 API + 40 MCP tests pass |
-| 5. MCP tools and host | Not started | Design recorded only |
+| 5. MCP tools and host | Complete | Official SDK ten-tool wire schemas/structured results verified; Generic Host and executable smoke checks; Release build 0 warnings/errors; 318 API + 86 MCP tests pass |
 | 6. Integration tests | Not started | Test requirements recorded only |
 | 7. Delivery and CI | Not started | Requirements recorded only |
 | 8. Independent review | Not started | Review prompt available |
 
 ## Next action
 
-Implement phase 5 from [PROMPTS.md](PROMPTS.md): verify pinned MCP SDK APIs, explicitly register the ten approved tools, wire the typed client and existing request/result mappers, configure strict argument/result serialization, and translate ApiException into tool errors. Build the actual stdio composition root with startup validation, external credentials, stderr diagnostics and clean cancellation/shutdown. Inspect generated schemas and add meaningful offline tool tests; no live API calls.
+Implement phase 6 from [PROMPTS.md](PROMPTS.md): persistent subprocess integration tests using the official SDK client and an explicitly isolated fake upstream, including full lifecycle, cancellation and redaction. Preserve the fixed production origin and code-only test overrides. Investigate SDK client local-cancellation forwarding separately from server handling, which is verified with explicit protocol notifications. No live API access.
 
 ## Phase 1 validation evidence
 
@@ -158,6 +158,42 @@ Results: Release build exit 0, **0 warnings / 0 errors**. Full offline suite exi
 Package graph unchanged; no new restore was needed. The OpenAPI SHA256 remains `b883304a41219a15395fde37110db3a6ea3c0d82a467e7c4123abb0e04b72ca9`. No secrets/actual financial records, Git operations, deployment or publication were introduced.
 
 Unrun: authorized live compatibility (not requested), SDK-generated schemas and actual stdio host/tool behavior (phase 5), subprocess integration (phase 6), publish/CI/locks (phase 7). API compatibility notes retain the unverified Bearer header, response required-field policy, mutation width conflict and diagnostic-format assumptions. Next action is phase 5; do not claim tools are callable until then.
+
+## Phase 5 handoff — 2026-10-29
+
+Implemented:
+
+- Exactly ten explicit delegates on the approved AccountingTools class, registered as SDK primitives without assembly scanning. Thin validation/invocation/explicit mapping; all eleven GET paths covered. No new upstream filters/routes, mutable tools or session tool.
+- Official MCP SDK 2.3.0 typed creation and structured output, flat strict input adapter, refined generated input/output schemas and read-only/non-destructive/idempotent/open-world annotations. Reviewed [schema snapshot](../tool-schemas.json) is compared with actual SDK client tools/list output. Runtime ordering checks supplement schemas.
+- Success has structured content plus matching JSON text. Validation, API and unexpected execution failures have isError=true and safe JSON text, without a success-shaped structured page. Original raw arguments reject duplicate fields before dictionary binding. Genuine empty upstream pages remain successful.
+- Generic Host composition, startup options validation, external environment/development-secret configuration, lazy authentication, stdio transport, cancellation and bounded shutdown. Console logging forced to stderr; SDK payload logs and Host internal exception logs blocked regardless of configuration. Static entry-point failure diagnostic. Production origin remains fixed.
+- 46 new offline MCP/host cases (86 MCP total): all tool mappings/exact queries, balances, required/null/type/case/unknown/range/limit validation before any session/GET, raw duplicate arguments, schemas/annotations, output precision/text equality, real empty pages, normalized/malformed/unexpected failures, explicit protocol cancellation, fake-infrastructure Generic Host startup/call/shutdown and protected logger configuration.
+
+Files: Mcp Tools/ and registration extension; HostComposition/Program; MCP test project references/resources plus ProtocolHarness, ToolExecutionTests, ToolSchemaTests and HostTests; [MCP runtime](../mcp-runtime.md), actual schema snapshot, README, tool-contract/infrastructure notes, architecture, compatibility and this status. Existing package pins and OpenAPI unchanged. No placeholder production classes or meaningless discovery tests.
+
+SDK APIs were checked against official tagged v2.3.0 docs/source, including McpServerTool.Create/options, DelegatingMcpServerTool, typed structured formatting, explicit primitive collection and stream/stdio transports. No inferred SDK attributes/methods. No new product/test package dependency was added.
+
+Exact final verification commands:
+
+```sh
+export DOTNET_CLI_HOME=/tmp/eboekhouden-dotnet
+export NUGET_PACKAGES=/tmp/eboekhouden-nuget
+dotnet restore EBoekhoudenMcp.sln --disable-parallel -m:1 -nr:false
+dotnet build EBoekhoudenMcp.sln -c Release --no-restore -m:1 -nr:false
+dotnet test EBoekhoudenMcp.sln -c Release --no-build --no-restore -m:1 -nr:false --logger 'console;verbosity=minimal'
+python3 /tmp/eboekhouden-phase5-smoke.py
+sha256sum e-boekhouden-api-v1.yaml
+```
+
+Results: restore exit 0; Release build exit 0, **0 warnings / 0 errors**; full offline suite exit 0, **318 API + 86 MCP = 404 passed, 0 failed, 0 skipped**. IntegrationTests intentionally reports no tests; no phase 6 suite coverage claimed. Restore required approved public NuGet access; VSTest required approved local socket access. All upstream handlers in tests were synthetic. No live API calls.
+
+Additional verification: a temporary external SDK-schema/mapped-fixture exporter produced ten actual tools and ten synthetic outputs. Independent Python jsonschema **4.23.0** Draft202012Validator checks accepted all **20 schemas**, all **10 mapped outputs**, and **10 valid inputs**; rejected **13 invalid inputs** (required values, casing, limits, enums, range and balance conditions, invalid dates). The audit used a /tmp-only uv target installation after system Python venv creation lacked ensurepip; no repository dependency was introduced. The temporary exporter initially had a restricted NuGet metadata warning, resolved by its restore; final exporter and solution builds were clean. The checked-in SDK-client snapshot/shape tests provide ongoing regression evidence.
+
+The one-off subprocess smoke (`/tmp/eboekhouden-phase5-smoke.py`, synthetic environment, no valid business calls) passed: missing configuration exits 1 with empty stdout/static stderr; initialization, exactly ten listed tools and invalid-argument tool error work; every stdout line is protocol JSON; forced Trace settings do not emit synthetic credential/query/result markers to stderr; stdin EOF exits 0. Generic Host with actual API/auth stack and fake HTTP primary handlers is also covered by committed tests. This smoke does not replace phase 6 fake-upstream subprocess tests.
+
+An initial SDK-client local-cancellation test timed out waiting for server-side cancellation, while an explicit notifications/cancelled message with a known request ID reaches the HTTP handler correctly. The committed test verifies the actual protocol notification and cancellation propagation. Client local-token forwarding remains a compatibility investigation for phase 6; do not equate local task cancellation with receipt of a remote notification. No current test failures or remaining phase 5 blockers.
+
+OpenAPI SHA256 remains `b883304a41219a15395fde37110db3a6ea3c0d82a467e7c4123abb0e04b72ca9`. No real secrets/financial records, Git operations, deployment or publication. Unrun: live compatibility (not authorized), dedicated fake-upstream subprocess integration suite (phase 6), publishing/CI/lock files (phase 7). Next action: phase 6.
 
 ## Handoff template
 

@@ -1,6 +1,6 @@
 # Authentication and HTTP infrastructure
 
-Phase 3 implements reusable API infrastructure, not MCP tools or the executable composition root. The [phase 4 typed client](api-client.md) now consumes `ReadTransport` for typed responses and normalized errors; phase 5 will wire the Generic Host and transport. No live API behavior has been verified.
+Phase 3 implements reusable API infrastructure. The [phase 4 typed client](api-client.md) consumes `ReadTransport` for typed responses and normalized errors; the [phase 5 runtime](mcp-runtime.md) wires the Generic Host and stdio transport. No live API behavior has been verified.
 
 ## Registration and external configuration
 
@@ -8,14 +8,14 @@ Register `services.AddEBoekhoudenApi(configuration)` once. This binds the `EBoek
 
 The session-token provider and read transport are singletons for one configured credential. They hold the factory, not a transient client captured by a singleton. Each operation creates and disposes a short-lived factory client; the factory owns handler pooling. Configuration changes require a restart; credential rotation is not a runtime administration-switch feature.
 
-The future host must supply its configuration from the normal environment/development-secret providers. Keep the credential outside tracked appsettings files. Environment keys are `EBoekhouden__AccessToken` and `EBoekhouden__Source`. The host project includes a development `UserSecretsId`; local secret setup can use:
+The host supplies its configuration from the normal environment/development-secret providers. Keep the credential outside tracked appsettings files. Environment keys are `EBoekhouden__AccessToken` and `EBoekhouden__Source`. The host project includes a development `UserSecretsId`; local secret setup can use:
 
 ```sh
 dotnet user-secrets set --project src/EBoekhouden.Host.Stdio EBoekhouden:AccessToken "<API_TOKEN>"
 dotnet user-secrets set --project src/EBoekhouden.Host.Stdio EBoekhouden:Source "McpLocal"
 ```
 
-These commands are setup instructions, not commands executed during development. The current scaffold executable still exits with its not-implemented stderr message; it does not load this configuration until the phase 5 composition root is implemented. Do not put real credentials into examples, tests, commits or handoff notes.
+These commands are setup instructions, not commands executed during development. The executable loads user secrets when launched with `DOTNET_ENVIRONMENT=Development`; environment variables are also supported. Do not put real credentials into examples, tests, commits or handoff notes.
 
 | Option | Default | Valid range/policy |
 | --- | --- | --- |
@@ -88,7 +88,7 @@ Production origin is fixed to `https://api.e-boekhouden.nl/`; configuration cann
 
 ## Diagnostics and dependencies
 
-Both named clients use `RemoveAllLoggers` to remove HTTP factory loggers, which could otherwise expose financial query values. The infrastructure does not log request/response bodies, tokens, credentials, headers or queries, or attach low-level exceptions to errors. There are no console writes. Any host diagnostics must go to stderr in phase 5. External trace exporters or custom handlers are not configured here.
+Both named clients use `RemoveAllLoggers` to remove HTTP factory loggers, which could otherwise expose financial query values. The infrastructure does not log request/response bodies, tokens, credentials, headers or queries, or attach low-level exceptions to errors. There are no console writes. Host diagnostics go to stderr; SDK payload logging is disabled independently of configuration. External trace exporters or custom handlers are not configured here.
 
 Production additions are `Microsoft.Extensions.Http` **10.0.13** and `Microsoft.Extensions.Options.ConfigurationExtensions` **10.0.13**. Validation uses a custom IValidateOptions implementation rather than adding DataAnnotations. Retry/circuit policy is the small explicit loop above; `Microsoft.Extensions.Http.Resilience` is deliberately not installed because a second policy owner would obscure the shared authentication/transient attempt budget. The test-only `Microsoft.Extensions.TimeProvider.Testing` **10.0.0** provides deterministic virtual time. Versions are centrally pinned and verified by restore and compilation against net10.0.
 

@@ -27,7 +27,7 @@ Source: repository file `e-boekhouden-api-v1.yaml`. Initial review: 2026-10-29. 
 
 - Most response schemas do not declare required properties. The implementation deliberately requires resource identities, invoice/mutation/outstanding accounting dates, page items/count, ledger balance code/type/balance, and the invoice item fields explicitly required by the specification. Other fields remain nullable. This is an offline minimum-invariant policy; authorized live verification may require a documented revision, not silent default values.
 - Decimal JSON fields are modeled as nullable decimal when optional. MCP maps decimals to invariant strings, with no rounding or invented currency. Quoted upstream monetary strings are rejected until actual evidence justifies a compatibility converter. Out-of-range decimal values fail deserialization; precision is bounded by .NET decimal.
-- API DTOs accept additive fields and either casing. MCP requests use strict camelCase with duplicate/unknown fields rejected. Generated SDK schemas and argument binding still require phase 5 verification.
+- API DTOs accept additive fields and either casing. MCP requests use strict camelCase with duplicate/unknown fields rejected. Phase 5 verifies actual SDK schemas and strict pre-binding of arguments, including raw duplicate fields.
 - Optional nested collections distinguish missing/null from empty; null collection elements fail result mapping. This prevents incomplete data from looking like a known-empty financial response.
 
 ## Phase 3 authentication assumptions
@@ -62,3 +62,10 @@ Evidence (spec / synthetic test / authorized live test):
 Remaining uncertainty:
 Follow-up:
 ```
+
+## Phase 5 MCP compatibility findings
+
+- SDK 2.3.0 normally nests a request record under a method parameter and does not enforce every JSON Schema constraint when binding. A `DelegatingMcpServerTool` adapter exposes flat documented arguments, rejects unknown/duplicate/case-mismatched/null/invalid fields with `ContractJson.Options`, then delegates typed output formatting to the SDK. Cross-field ordering remains runtime validation.
+- `UseStructuredContent=true` produces an object output schema, structured content and matching JSON text for successful typed records. Tool failures use safe JSON text with `isError=true` and omit success-shaped structured content. Optional success properties are present with explicit null; response VAT/category codes remain open strings.
+- SDK Trace diagnostics can contain complete protocol payloads. The executable blocks SDK logging regardless of environment log-level settings and forces console diagnostics to stderr. HTTP factory loggers remain removed.
+- Explicit `notifications/cancelled` messages are verified to cancel the upstream handler. An initial test that only canceled the SDK client's local call did not reliably forward cancellation in this harness; tests use an explicit request ID and protocol notification. Do not infer server cancellation from a locally canceled client task. Revisit client cancellation forwarding in phase 6; no upstream/live compatibility claim is made.

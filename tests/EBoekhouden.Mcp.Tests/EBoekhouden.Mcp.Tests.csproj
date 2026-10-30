@@ -6,8 +6,13 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/EBoekhouden.Mcp/EBoekhouden.Mcp.csproj" />
+    <ProjectReference Include="../../src/EBoekhouden.Host.Stdio/EBoekhouden.Host.Stdio.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../docs/tool-schemas.json" Link="tool-schemas.json" />
+    <EmbeddedResource Include="../EBoekhouden.Api.Tests/Fixtures/*.json" Link="Fixtures/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

@@ -80,9 +80,9 @@ Pin verified stable versions in `Directory.Packages.props`, SDK in `global.json`
 - `Microsoft.Extensions.Hosting` **10.0.13** in the executable, compatible with the MCP package's Extensions dependency minimums. Phase 3 adds Http and Options.ConfigurationExtensions 10.0.13; resilience uses a single explicit loop and custom options validation. No HTTP hosting package is included.
 - `xunit.v3` **3.2.2**, `xunit.runner.visualstudio` **3.1.5**, and `Microsoft.NET.Test.Sdk` **18.0.1** in each test project. VSTest is explicitly selected in `global.json`; test projects use `OutputType=Exe`, `IsTestProject=true`, and `IsPackable=false`. The adapter is private to each test project. No test-only dependency is referenced by production projects.
 - Built-in .NET 10 analyzers and nullable checking are enabled centrally. CA2016 warns when cancellation tokens are not forwarded. No separate analyzer framework is added.
-- The host currently exits with a static stderr diagnostic and status 1; phase 5 supplies the real composition root. There are no placeholder API/tool classes or dummy tests.
+- Phase 5 supplies the real Generic Host composition root and stdio executable. There are no placeholder production classes or dummy tests.
 
-Version-specific SDK verification: [v2.3.0 getting started](https://github.com/modelcontextprotocol/csharp-sdk/blob/v2.3.0/docs/concepts/getting-started.md) documents `AddMcpServer`, `WithStdioServerTransport`, and stderr console logging. These APIs are guidance for phase 5, not implemented behavior. Explicit approved tool registration still requires version-specific verification when implemented.
+Version-specific SDK verification: [v2.3.0 getting started](https://github.com/modelcontextprotocol/csharp-sdk/blob/v2.3.0/docs/concepts/getting-started.md) documents `AddMcpServer`, `WithStdioServerTransport`, and stderr console logging. Phase 5 implements these APIs and verifies the tagged SDK source, actual schemas and protocol results. The explicit delegate catalog uses `McpServerTool.Create`, `McpServerToolCreateOptions.UseStructuredContent` and `DelegatingMcpServerTool`; see [MCP runtime](../mcp-runtime.md).
 
 Runner guidance: [xUnit VSTest/MTP documentation](https://xunit.net/docs/getting-started/v3/microsoft-testing-platform) explains the VSTest adapter path. Stable package metadata was checked for [xunit.v3 3.2.2](https://www.nuget.org/packages/xunit.v3/3.2.2), [adapter 3.1.5](https://www.nuget.org/packages/xunit.runner.visualstudio/3.1.5), and [Test SDK 18.0.1](https://www.nuget.org/packages/Microsoft.NET.Test.Sdk/18.0.1). Restore, Release compilation, and adapter discovery verify the selected combination locally. Phase 2 adds meaningful offline contract tests; integration tests remain phase 6 work.
 
@@ -169,7 +169,7 @@ Enforce exact approved methods, routes, and origin immediately before dispatch. 
 
 See [HTTP infrastructure](../http-infrastructure.md) for exact registration, external configuration, defaults, limits, circuit policy, request allowlist, timeout ownership, and test seams. Production uses two named factory clients with redirects/cookies disabled and all HTTP factory loggers removed. Session POSTs have no retry policy; one shared read loop owns the complete GET attempt budget, including one optional 401 replay. Default budget is three GET attempts and a 30-second operation deadline including queue/token waits, buffering and backoff. Token refresh uses a cancellation-aware lock and atomic lease-identity invalidation.
 
-The planned Http.Resilience/DataAnnotations dependencies were replaced by this explicit bounded policy and IValidateOptions validator to avoid multiple retry owners and keep configuration validation local. Production origin is fixed; the code-only test registration accepts numeric loopback origins only. ValidateOnStart is registered and tested through IStartupValidator; the executable composition root remains phase 5 work. Development user-secret metadata is present in the host project, with setup instructions in the infrastructure document.
+The planned Http.Resilience/DataAnnotations dependencies were replaced by this explicit bounded policy and IValidateOptions validator to avoid multiple retry owners and keep configuration validation local. Production origin is fixed; the code-only test registration accepts numeric loopback origins only. ValidateOnStart is registered and tested both through IStartupValidator and actual Generic Host startup. Development user-secret metadata is present in the host project, with setup instructions in the infrastructure document.
 
 ### Implemented phase 4 client
 
@@ -177,11 +177,11 @@ The planned Http.Resilience/DataAnnotations dependencies were replaced by this e
 
 Only HTTP 200 typed responses succeed. A 404 is an error, an empty list envelope succeeds, and malformed/missing/ambiguous data fails. Unknown/additive fields are tolerated, but duplicate JSON properties are rejected. Optional values remain null. Every final response/stream is disposed. A linked typed-call deadline extends the transport budget through JSON parsing; caller cancellation stays cancellation.
 
-ApiException uses fixed local messages, actual HTTP status and optional bounded/sanitized code/trace metadata. Error title/message/errors text and raw inner exceptions are discarded. Session errors use the same sanitizer; no extra retry layer was added. Phase 5 must translate ApiException into tool errors explicitly.
+ApiException uses fixed local messages, actual HTTP status and optional bounded/sanitized code/trace metadata. Error title/message/errors text and raw inner exceptions are discarded. Session errors use the same sanitizer; no extra retry layer was added. Phase 5 translates ApiException into safe `isError=true` tool results explicitly.
 
 ## MCP behavior
 
-Explicitly register approved tool classes. Provide typed contracts, useful descriptions, read-only annotations, and output schemas. Inspect actual generated schemas with the pinned SDK. Keep protocol-specific result formatting and errors in the MCP layer.
+`AccountingToolCatalog` explicitly registers ten delegates from the approved `AccountingTools` class; no assembly scanning is used. Each has typed contracts, descriptions, read-only/non-destructive/idempotent/open-world annotations and a reviewed output schema. [Actual schemas](../tool-schemas.json) are compared with `tools/list` in tests. Protocol formatting and errors remain in the MCP layer; see [MCP runtime](../mcp-runtime.md).
 
 Return structured results plus compatible text content as supported by the SDK. Invalid input must not reach the upstream service. API failures must not look like successful empty pages. Preserve useful error codes/status/trace IDs, while sanitizing potentially sensitive messages.
 
