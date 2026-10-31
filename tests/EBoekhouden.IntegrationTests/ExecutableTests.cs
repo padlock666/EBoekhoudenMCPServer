@@ -19,7 +19,7 @@ public sealed class ExecutableTests
             return Task.FromResult(new FakeUpstream.Reply(200, context.Request.Path == "/v1/mutation"
                 ? "{\"items\":[" + item + "],\"count\":1}" : item));
         };
-        await using var host = StdioProcess.Start(api.Origin);
+        await using var host = await StdioProcess.StartAsync(api.Origin);
         await host.ConnectAsync();
         var page = Success(await host.CallAsync("search_entries"));
         Assert.Equal(2, page.GetProperty("items")[0].GetProperty("type").GetInt32());
@@ -39,7 +39,7 @@ public sealed class ExecutableTests
         api.Respond = (context, session, _) => Task.FromResult(session > 0 ? FakeUpstream.Session(session)
             : ++reads == 1 ? new FakeUpstream.Reply(200, "{\"code\":\"SYN\",\"type\":\"BAL\",\"balance\":" + number + "}")
             : FakeUpstream.DefaultReply(context.Request, session));
-        await using var host = StdioProcess.Start(api.Origin);
+        await using var host = await StdioProcess.StartAsync(api.Origin);
         await host.ConnectAsync();
         const string arguments = """{"mode":"as_of","to":"2026-03-31","ledgerId":7}""";
         var error = Failure(await host.CallAsync("get_ledger_balances", arguments));
@@ -67,7 +67,7 @@ public sealed class ExecutableTests
             context.Response.ContentLength = sessionFailure ? 16 * 1024 + 1 : 16 * 1024 * 1024 + 1;
             return Task.FromResult(new FakeUpstream.Reply(403, ""));
         };
-        await using var host = StdioProcess.Start(api.Origin);
+        await using var host = await StdioProcess.StartAsync(api.Origin);
         await host.ConnectAsync();
         var error = Failure(await host.CallAsync("get_relation", """{"id":17}"""));
         Assert.Equal(403, error.GetProperty("status").GetInt32());
@@ -77,38 +77,13 @@ public sealed class ExecutableTests
         await host.CloseInputAndWaitAsync(); host.AssertCleanOutput(); api.AssertHealthy();
     }
 
-    [Fact]
-    public async Task DevelopmentUserSecretsAllowOfflineStartupWithoutCredentialEnvironmentVariables()
-    {
-        var appData = Path.Combine(Path.GetTempPath(), "eboekhouden-secrets-test-" + Guid.NewGuid().ToString("N"));
-        var secrets = Path.Combine(appData, "Microsoft", "UserSecrets", "EBoekhoudenMcp.Host.Stdio-83bf70f6-3715-4ca8-9691-16bd407fb162");
-        Directory.CreateDirectory(secrets);
-        try
-        {
-            await File.WriteAllTextAsync(Path.Combine(secrets, "secrets.json"), JsonSerializer.Serialize(new Dictionary<string, string>
-            { ["EBoekhouden:AccessToken"] = FakeUpstream.Credential, ["EBoekhouden:Source"] = "Tests" }), TestContext.Current.CancellationToken);
-            await using var api = await FakeUpstream.StartAsync();
-            await using var host = StdioProcess.Start(api.Origin, new Dictionary<string, string?>
-            {
-                ["APPDATA"] = appData, ["DOTNET_ENVIRONMENT"] = "Development",
-                ["EBoekhoudenTest__UpstreamOrigin"] = null, ["EBoekhouden__AccessToken"] = null, ["EBoekhouden__Source"] = null,
-            });
-            await host.ConnectAsync();
-            Assert.Equal(10, (await host.Client.ListToolsAsync(cancellationToken: host.Token)).Count);
-            // Discovery only: no accounting tool is invoked against the fixed production origin.
-            Assert.Empty(api.Requests);
-            await host.CloseInputAndWaitAsync(); host.AssertCleanOutput(); api.AssertHealthy();
-        }
-        finally { Directory.Delete(appData, recursive: true); }
-    }
-
     [Theory]
     [InlineData("2025-06-18")]
     [InlineData("2026-07-28")]
     public async Task LegacyInitializationAndModernDiscoveryCanBothInvokeTools(string protocolVersion)
     {
         await using var api = await FakeUpstream.StartAsync();
-        await using var host = StdioProcess.Start(api.Origin);
+        await using var host = await StdioProcess.StartAsync(api.Origin);
         await host.ConnectAsync(protocolVersion);
         Assert.Equal(10, (await host.Client.ListToolsAsync(cancellationToken: host.Token)).Count);
         ExecutableTests.Success(await host.CallAsync("get_relation", """{"id":17}"""));
@@ -121,7 +96,7 @@ public sealed class ExecutableTests
     public async Task InitializationSchemasAndAllElevenReadRoutesWorkOverActualStdio()
     {
         await using var api = await FakeUpstream.StartAsync();
-        await using var host = StdioProcess.Start(api.Origin);
+        await using var host = await StdioProcess.StartAsync(api.Origin);
         await host.ConnectAsync();
         Assert.Equal("EBoekhoudenMcp", host.Client.ServerInfo!.Name);
         Assert.NotNull(host.Client.ServerCapabilities.Tools);
@@ -184,7 +159,7 @@ public sealed class ExecutableTests
     public async Task InvalidInputsIncludingRawDuplicatesCauseZeroHttpRequests()
     {
         await using var api = await FakeUpstream.StartAsync();
-        await using var host = StdioProcess.Start(api.Origin);
+        await using var host = await StdioProcess.StartAsync(api.Origin);
         await host.ConnectAsync();
         (string Tool, string Args)[] invalid =
         [
@@ -213,8 +188,8 @@ public sealed class ExecutableTests
     }
 
     [Theory]
-    [InlineData("missing-credential")]
-    [InlineData("production-missing-credential")]
+    [InlineData("invalid-keyring-account")]
+    [InlineData("production-invalid-keyring-account")]
     [InlineData("bad-source")]
     [InlineData("bad-binding")]
     [InlineData("production-override")]
@@ -231,11 +206,11 @@ public sealed class ExecutableTests
         var environment = new Dictionary<string, string?>();
         switch (scenario)
         {
-            case "missing-credential": environment["EBoekhouden__AccessToken"] = ""; break;
-            case "production-missing-credential":
+            case "invalid-keyring-account": environment["EBoekhouden__Keyring__Account"] = ""; break;
+            case "production-invalid-keyring-account":
                 environment["DOTNET_ENVIRONMENT"] = "Production";
                 environment["EBoekhoudenTest__UpstreamOrigin"] = null;
-                environment["EBoekhouden__AccessToken"] = "";
+                environment["EBoekhouden__Keyring__Account"] = "";
                 break;
             case "bad-source": environment["EBoekhouden__Source"] = FakeUpstream.PrivateData; break;
             case "bad-binding": environment["EBoekhouden__MaxReadAttempts"] = FakeUpstream.PrivateData; break;
@@ -248,7 +223,7 @@ public sealed class ExecutableTests
             case "query-origin": environment["EBoekhoudenTest__UpstreamOrigin"] = api.Origin.AbsoluteUri + "?override=1"; break;
             case "fragment-origin": environment["EBoekhoudenTest__UpstreamOrigin"] = api.Origin.AbsoluteUri + "#override"; break;
         }
-        await using var host = StdioProcess.Start(api.Origin, environment);
+        await using var host = await StdioProcess.StartAsync(api.Origin, environment);
         await host.WaitForExitAsync();
         Assert.Equal(1, host.ExitCode);
         Assert.Equal("", host.Stdout);
@@ -279,15 +254,15 @@ public sealed class ExecutableTests
                 _ => FakeUpstream.Session(number),
             }
             : new FakeUpstream.Reply(status, scenario == "malformed" ? "not-json " + FakeUpstream.PrivateData : body));
-        await using var host = StdioProcess.Start(api.Origin);
+        await using var host = await StdioProcess.StartAsync(api.Origin);
         await host.ConnectAsync();
         var error = Failure(await host.CallAsync("search_relations"));
         Assert.Equal("upstream_failure", error.GetProperty("kind").GetString());
         Assert.Equal(status, error.GetProperty("status").GetInt32());
         if (scenario is not ("session-invalid" or "malformed"))
         {
-            Assert.Equal("SYNTHETIC_001", error.GetProperty("code").GetString());
-            Assert.Equal("TRACE-123", error.GetProperty("traceId").GetString());
+            Assert.Equal(JsonValueKind.Null, error.GetProperty("code").ValueKind);
+            Assert.Equal(JsonValueKind.Null, error.GetProperty("traceId").ValueKind);
         }
         Assert.Equal(sessions, api.Sessions);
         Assert.Equal(reads, api.Reads);
@@ -304,7 +279,7 @@ public sealed class ExecutableTests
         api.Respond = (context, number, _) => Task.FromResult(number > 0 ? FakeUpstream.Session(number)
             : context.Request.Query["offset"] == "1" ? new FakeUpstream.Reply(200, """{"items":[],"count":0}""")
             : FakeUpstream.DefaultReply(context.Request, number));
-        await using var host = StdioProcess.Start(api.Origin);
+        await using var host = await StdioProcess.StartAsync(api.Origin);
         await host.ConnectAsync();
         var first = Success(await host.CallAsync("search_relations", """{"limit":1}"""));
         var page = first.GetProperty("page");
@@ -325,7 +300,7 @@ public sealed class ExecutableTests
     public async Task BalanceModesKeepRequestedDatesAndUpstreamValuesWithoutAggregation(bool singleLedger)
     {
         await using var api = await FakeUpstream.StartAsync();
-        await using var host = StdioProcess.Start(api.Origin);
+        await using var host = await StdioProcess.StartAsync(api.Origin);
         await host.ConnectAsync();
         foreach (var mode in new[] { "as_of", "period_change" })
         {
@@ -353,7 +328,7 @@ public sealed class ExecutableTests
         await using var destination = await FakeUpstream.StartAsync();
         await using var api = await FakeUpstream.StartAsync();
         api.Respond = (_, number, _) => Task.FromResult(number > 0 ? FakeUpstream.Session(number) : new FakeUpstream.Reply(302, "{}", destination.Origin.AbsoluteUri + "v1/relation"));
-        await using var host = StdioProcess.Start(api.Origin);
+        await using var host = await StdioProcess.StartAsync(api.Origin);
         await host.ConnectAsync();
         Assert.Equal(302, Failure(await host.CallAsync("search_relations")).GetProperty("status").GetInt32());
         Assert.Empty(destination.Requests);
@@ -365,7 +340,7 @@ public sealed class ExecutableTests
     {
         var api = await FakeUpstream.StartAsync();
         var origin = api.Origin;
-        var host = StdioProcess.Start(origin);
+        var host = await StdioProcess.StartAsync(origin);
         var id = host.Id;
         try
         {

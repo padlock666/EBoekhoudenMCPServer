@@ -57,6 +57,7 @@ internal sealed class HttpHarness : IDisposable
         var services = new ServiceCollection();
         services.AddSingleton<TimeProvider>(Time);
         services.AddLogging(b => b.SetMinimumLevel(LogLevel.Trace).AddProvider(Logs));
+        services.AddSingleton<IPasswordSource, SyntheticPasswordSource>();
         services.AddEBoekhoudenApiForTesting(Configuration(), new Uri("http://127.0.0.1:12345/"));
         if (configure is not null) services.Configure(configure);
         services.AddHttpClient(ApiServiceCollectionExtensions.SessionClientName).ConfigurePrimaryHttpMessageHandler(() => Sessions);
@@ -68,7 +69,6 @@ internal sealed class HttpHarness : IDisposable
     {
         var values = new Dictionary<string, string?>
         {
-            ["EBoekhouden:AccessToken"] = Credential,
             ["EBoekhouden:Source"] = "Tests",
         };
         if (overrides is not null) foreach (var item in overrides) values[item.Key] = item.Value;
@@ -92,4 +92,13 @@ internal sealed class HttpHarness : IDisposable
     }
 
     public void Dispose() => Services.Dispose();
+}
+
+internal sealed class SyntheticPasswordSource : IPasswordSource
+{
+    public ValueTask<Password> GetAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(Password.FromUtf8(System.Text.Encoding.UTF8.GetBytes(HttpHarness.Credential)));
+    }
 }

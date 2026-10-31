@@ -10,10 +10,10 @@ namespace EBoekhouden.Api.Tests;
 public sealed class ReadClientErrorTests
 {
     [Theory]
-    [InlineData("error-dictionary", 400, "EXAMPLE_001", "ABCDEF-123456.")]
-    [InlineData("error-array", 400, "MUT_007", "TRACE-SYN-ARRAY-001")]
-    [InlineData("security-error", 403, "API_SESSION_004", "SYN-AUTH-0001")]
-    public async Task ErrorShapesRetainOnlyBoundedMetadataAndTheActualHttpStatus(string fixture, int status, string code, string trace)
+    [InlineData("error-dictionary", 400)]
+    [InlineData("error-array", 400)]
+    [InlineData("security-error", 403)]
+    public async Task ErrorShapesKeepHttpStatusAndDiscardReflectedMetadata(string fixture, int status)
     {
         var body = ClientTestSupport.Fixture(fixture);
         var content = ClientTestSupport.Json(body);
@@ -22,8 +22,8 @@ public sealed class ReadClientErrorTests
         var error = await Assert.ThrowsAsync<ApiException>(() => harness.Client().GetRelationAsync(17, TestContext.Current.CancellationToken));
         Assert.Equal(ApiErrorKind.Http, error.Kind);
         Assert.Equal((HttpStatusCode)status, error.StatusCode);
-        Assert.Equal(code, error.Code);
-        Assert.Equal(trace, error.TraceId);
+        Assert.Null(error.Code);
+        Assert.Null(error.TraceId);
         Assert.Null(error.InnerException);
         Assert.Empty(error.Data);
         Assert.DoesNotContain("Synthetic private", error.ToString());
@@ -53,7 +53,7 @@ public sealed class ReadClientErrorTests
         var error = await Assert.ThrowsAsync<ApiException>(() => ClientTestSupport.Call(harness.Client(), endpoint, TestContext.Current.CancellationToken));
         Assert.Equal(ApiErrorKind.Http, error.Kind);
         Assert.Equal(HttpStatusCode.NotFound, error.StatusCode);
-        Assert.Equal("MUT_007", error.Code);
+        Assert.Null(error.Code);
         Assert.Equal("The requested e-Boekhouden resource was not found.", error.Message);
         Assert.Equal(1, harness.Reads.Calls);
     }
@@ -81,7 +81,7 @@ public sealed class ReadClientErrorTests
     }
 
     [Fact]
-    public async Task DiagnosticLengthsAndTotalBodyInspectionAreBounded()
+    public async Task ErrorMetadataIsSuppressedRegardlessOfLengthOrAlphabet()
     {
         var body = JsonSerializer.Serialize(new { code = new string('X', 65), traceId = new string('T', 129) });
         using var harness = new HttpHarness(read: (_, _) => Task.FromResult(ClientTestSupport.Response(body, HttpStatusCode.BadRequest)));
@@ -95,8 +95,8 @@ public sealed class ReadClientErrorTests
         Assert.Null(oversized.TraceId);
         body = """{"code":"FUTURE_999","traceId":"TRACE-001"}""";
         var future = await Assert.ThrowsAsync<ApiException>(() => harness.Client().GetRelationAsync(17, TestContext.Current.CancellationToken));
-        Assert.Equal("FUTURE_999", future.Code);
-        Assert.Equal("TRACE-001", future.TraceId);
+        Assert.Null(future.Code);
+        Assert.Null(future.TraceId);
     }
 
     [Theory]
@@ -108,7 +108,7 @@ public sealed class ReadClientErrorTests
         var body = JsonSerializer.Serialize(new { code = "EXAMPLE_001", traceId = reflected, message = HttpHarness.Credential });
         using var harness = new HttpHarness(read: (_, _) => Task.FromResult(ClientTestSupport.Response(body, HttpStatusCode.BadRequest)));
         var error = await Assert.ThrowsAsync<ApiException>(() => harness.Client().GetRelationAsync(17, TestContext.Current.CancellationToken));
-        Assert.Equal("EXAMPLE_001", error.Code);
+        Assert.Null(error.Code);
         Assert.Null(error.TraceId);
         Assert.DoesNotContain(HttpHarness.Credential, error.ToString());
         Assert.DoesNotContain("synthetic-session", error.ToString());
@@ -122,13 +122,13 @@ public sealed class ReadClientErrorTests
             """{"code":"EXAMPLE_001","traceId":"TRACE-PRIVATEVALUE-001","title":"PrivateValue"}""", HttpStatusCode.BadRequest)));
         var error = await Assert.ThrowsAsync<ApiException>(() => harness.Client().GetRelationsAsync(
             new(new(), Name: new("like", "%PrivateValue%")), TestContext.Current.CancellationToken));
-        Assert.Equal("EXAMPLE_001", error.Code);
+        Assert.Null(error.Code);
         Assert.Null(error.TraceId);
         Assert.DoesNotContain("PrivateValue", error.ToString());
     }
 
     [Fact]
-    public async Task SessionErrorsUseTheSameSanitizedMetadataWithoutSendingAGetOrRetryingPost()
+    public async Task SessionErrorsSuppressMetadataWithoutSendingAGetOrRetryingPost()
     {
         var content = ClientTestSupport.Json(ClientTestSupport.Fixture("security-error"));
         using var harness = new HttpHarness(session: (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.Forbidden) { Content = content }));
@@ -136,8 +136,8 @@ public sealed class ReadClientErrorTests
         Assert.Equal(ApiErrorKind.Transport, error.Kind);
         Assert.Equal(TransportFailure.SessionRejected, error.TransportFailure);
         Assert.Equal(HttpStatusCode.Forbidden, error.StatusCode);
-        Assert.Equal("API_SESSION_004", error.Code);
-        Assert.Equal("SYN-AUTH-0001", error.TraceId);
+        Assert.Null(error.Code);
+        Assert.Null(error.TraceId);
         Assert.True(content.Disposed);
         Assert.Equal(1, harness.Sessions.Calls);
         Assert.Equal(0, harness.Reads.Calls);
@@ -177,7 +177,7 @@ public sealed class ReadClientErrorTests
             ClientTestSupport.Fixture("error-array"), (HttpStatusCode)status)), configure: o => o.MaxReadAttempts = 1);
         var error = await Assert.ThrowsAsync<ApiException>(() => harness.Client().GetLedgerAsync(7, TestContext.Current.CancellationToken));
         Assert.Equal((HttpStatusCode)status, error.StatusCode);
-        Assert.Equal("MUT_007", error.Code);
+        Assert.Null(error.Code);
         Assert.Equal(1, harness.Reads.Calls);
     }
 }

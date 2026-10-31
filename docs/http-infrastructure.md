@@ -8,18 +8,14 @@ Register `services.AddEBoekhoudenApi(configuration)` once. This binds the `EBoek
 
 The session-token provider and read transport are singletons for one configured credential. They hold the factory, not a transient client captured by a singleton. Each operation creates and disposes a short-lived factory client; the factory owns handler pooling. Configuration changes require a restart; credential rotation is not a runtime administration-switch feature.
 
-The host supplies its configuration from the normal environment/development-secret providers. Keep the credential outside tracked appsettings files. Environment keys are `EBoekhouden__AccessToken` and `EBoekhouden__Source`. The host project includes a development `UserSecretsId`; local secret setup can use:
+`IPasswordSource` supplies the API key exclusively through `KeyringPasswordSource`, using GNOME Keyring's application/account attributes. The key is acquired when one-shot session content is serialized after connection/TLS validation, reread for each session POST, and released after writing the body. Session caching is unchanged. Native loading and bus lookups remain lazy; discovery never accesses the keyring. Session and read errors suppress upstream code/trace because the secret is no longer retained for reflection filtering; status and fixed failure messages remain available. See [Linux Secret Service](linux-secret-service.md).
 
-```sh
-dotnet user-secrets set --project src/EBoekhouden.Host.Stdio EBoekhouden:AccessToken "<API_TOKEN>"
-dotnet user-secrets set --project src/EBoekhouden.Host.Stdio EBoekhouden:Source "McpLocal"
-```
-
-These commands are setup instructions, not commands executed during development. The executable loads user secrets when launched with `DOTNET_ENVIRONMENT=Development`; environment variables are also supported. Do not put real credentials into examples, tests, commits or handoff notes.
+The host accepts `--config /absolute/path/config.json` for nonsecret settings. Selected JSON overrides appsettings; environment and command-line values override those settings. Explicit JSON loading has no file watcher. Configuration changes require a restart. See [setup](../configuration.md#2-configure-gnome-keyring), including the `secret-tool store` command.
 
 | Option | Default | Valid range/policy |
 | --- | --- | --- |
-| AccessToken | absent | required, non-whitespace; never echoed by validation |
+| Keyring.Application | EBoekhoudenMcp | Nonblank, no controls, at most 4,096 characters |
+| Keyring.Account | api | Nonblank, no controls, at most 4,096 characters |
 | Source | absent | exact specification pattern `^[\w_ ]{1,10}$` |
 | SessionTimeout | 10 seconds | positive, at most 2 minutes |
 | AttemptTimeout | 10 seconds | positive, at most 2 minutes, no greater than OperationTimeout |

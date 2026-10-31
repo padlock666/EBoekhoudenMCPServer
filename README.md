@@ -1,6 +1,6 @@
 # e-Boekhouden read-only MCP server
 
-A C#/.NET 10 stdio server exposing **ten read-only accounting tools** through the official MCP C# SDK **2.3.0**. It uses one externally configured credential, has no database, and authenticates lazily. `POST /v1/session` is internal authentication; business operations are GET only. There is no arbitrary HTTP tool, administration switching, remote MCP HTTP hosting, or derived reporting.
+A C#/.NET 10 stdio server exposing **ten read-only accounting tools** through the official MCP C# SDK **2.3.0**. It retrieves one API key from GNOME Keyring, has no database, and authenticates lazily. `POST /v1/session` is internal authentication; business operations are GET only. There is no arbitrary HTTP tool, administration switching, remote MCP HTTP hosting, or derived reporting.
 
 Release build, offline tests and a local framework-dependent publish are verified on Linux x64. The published DLL is tested through the official MCP client against a loopback fake API. **Live e-Boekhouden compatibility remains unverified**, including the specification's conflicting authorization-header prose and response completeness; see [compatibility notes](docs/development/API_COMPATIBILITY.md). No deployment or package publication is implied.
 
@@ -8,12 +8,13 @@ Start with [configuration.md](configuration.md) for credentials, runtime setting
 
 ## Prerequisites
 
-- Build/test: stable .NET SDK **10.0.113**, pinned exactly by `global.json` with prereleases and roll-forward disabled. The SDK installation must include the .NET 10 ASP.NET Core shared runtime for the test-only Kestrel fake API.
-- Run the published host: **.NET 10 runtime** (`Microsoft.NETCore.App`). The application does not require ASP.NET Core in production. The verified local runtimes are **10.0.13**.
+- Build/test: stable .NET SDK **10.0.114**, pinned exactly by `global.json` with prereleases and roll-forward disabled. The SDK installation must include the .NET 10 ASP.NET Core shared runtime for the test-only Kestrel fake API.
+- Run the published host: **.NET 10 runtime** (`Microsoft.NETCore.App`). The application does not require ASP.NET Core in production. Current checks use runtime **10.0.14**.
+- Linux with GNOME Keyring, libsecret and the desktop session bus. See [keyring setup](configuration.md#2-configure-gnome-keyring) and [native test prerequisites](docs/linux-secret-service.md#verification).
 - An MCP client capable of launching a stdio child process; a valid e-Boekhouden API credential is needed only for actual accounting calls. Offline tests supply synthetic credentials themselves.
 - NuGet access or a populated package cache for restore; local socket/bind permission for VSTest and integration tests. Bash is needed for the shared verification script.
 
-Check installed versions with `dotnet --list-sdks` and `dotnet --list-runtimes`. Windows/macOS, IPv6 listeners and OS-signal shutdown have not been verified; stdin EOF is tested on Linux.
+Check installed versions with `dotnet --list-sdks` and `dotnet --list-runtimes`. Credential retrieval requires Linux. IPv6 listeners and OS-signal shutdown have not been verified; stdin EOF is tested on Linux.
 
 ## Restore, build, test and publish
 
@@ -49,32 +50,27 @@ The runner is **VSTest**, selected in `global.json`, with **xunit.v3 3.2.2**, **
 
 ## Credentials and configuration
 
-Supply credentials through your MCP client's environment/secret manager, or through local .NET development user secrets. Examples contain placeholder credentials and paths; accounting IDs, names and dates below are invented examples to replace with your own results.
-
-Required settings:
-
-| Environment key | Meaning |
-| --- | --- |
-| `EBoekhouden__AccessToken` | API credential, required and non-whitespace |
-| `EBoekhouden__Source` | Integration code, 1–10 characters, pattern `^[\w_ ]{1,10}$`; `McpLocal` is a valid example |
-
-Environment setup on Bash:
+Store your API key in GNOME Keyring from a terminal in your desktop login session:
 
 ```sh
-export EBoekhouden__AccessToken="<API_TOKEN>"
-export EBoekhouden__Source="McpLocal"
+secret-tool store --label='e-Boekhouden MCP API key' \
+  application EBoekhoudenMcp account api
 ```
 
-For local development user secrets, configure the existing host project ID:
+Enter the API key at the hidden password prompt. Use the same desktop user/session for your MCP client. See [configuration.md](configuration.md#2-configure-gnome-keyring) for installation, keyring unlock, custom attributes and rotation.
 
-```sh
-dotnet user-secrets set --project src/EBoekhouden.Host.Stdio EBoekhouden:AccessToken "<API_TOKEN>"
-dotnet user-secrets set --project src/EBoekhouden.Host.Stdio EBoekhouden:Source "McpLocal"
+Copy [examples/config.example.json](examples/config.example.json) to a local configuration file:
+
+```json
+{
+  "EBoekhouden": {
+    "Source": "McpLocal",
+    "Keyring": { "Application": "EBoekhoudenMcp", "Account": "api" }
+  }
+}
 ```
 
-Launch with `DOTNET_ENVIRONMENT=Development` to load those secrets, using the same OS user/profile that stored them. Environment variables override user secrets. Keep real credentials outside tracked client/appsettings files and command-line arguments. The development secret provider is verified with an isolated synthetic secret store; normal tests do not read your profile.
-
-Configuration is validated without network access at startup. Sessions are obtained only on a valid accounting call. Missing/invalid configuration exits 1 with a static stderr diagnostic and no stdout. Changes to credentials/options require restart. Timeouts, concurrency, retry limits and the explicit loopback test gate are documented in [HTTP infrastructure](docs/http-infrastructure.md). Production always uses the fixed upstream origin.
+Launch with `--config /ABSOLUTE/PATH/TO/config.json`. This file contains only nonsecret settings. Startup validates settings locally; the key is retrieved when a valid accounting call needs a new session. Existing sessions are cached. Stdout carries only MCP traffic; diagnostics use stderr.
 
 ## MCP client configuration
 
@@ -85,17 +81,13 @@ Point your client at the **absolute published DLL path**. This generic `mcpServe
   "mcpServers": {
     "eboekhouden": {
       "command": "/ABSOLUTE/PATH/TO/dotnet",
-      "args": ["/ABSOLUTE/PATH/TO/EBoekhoudenMCPServer/artifacts/publish/stdio/EBoekhouden.Host.Stdio.dll"],
-      "env": {
-        "EBoekhouden__AccessToken": "<API_TOKEN>",
-        "EBoekhouden__Source": "McpLocal"
-      }
+      "args": ["/ABSOLUTE/PATH/TO/EBoekhoudenMCPServer/artifacts/publish/stdio/EBoekhouden.Host.Stdio.dll", "--config", "/ABSOLUTE/PATH/TO/config.json"]
     }
   }
 }
 ```
 
-For development user secrets, set `DOTNET_ENVIRONMENT` to `Development` in the client environment and omit the credential variables. GUI clients may need an absolute `dotnet` path because their PATH differs from your shell. JSON Windows paths require escaped backslashes.
+GUI clients may need an absolute `dotnet` path because their PATH differs from your shell. Preserve the desktop session's `DBUS_SESSION_BUS_ADDRESS` when launching the server.
 
 The client launches the published artifact directly; build output must never enter the protocol stream. Stdout is exclusively JSON-RPC. Diagnostics go to stderr; SDK payload logging is disabled even if external configuration asks for Trace. Closing stdin stops the session and cancels pending HTTP operations. See [MCP runtime](docs/mcp-runtime.md) for result formatting and lifecycle details.
 
@@ -138,7 +130,7 @@ Success returns structured content plus matching JSON text. A real empty page su
 
 | Symptom | Check |
 | --- | --- |
-| Static startup diagnostic, exit 1 | Required credential/source, source pattern and option types; for user secrets, Development environment and OS profile |
+| Static startup diagnostic, exit 1 | Absolute configuration path, keyring attributes, Source pattern and option types |
 | SDK/runtime or dependency load error | Exact build SDK, installed .NET 10 runtime, absolute DLL path and complete published directory |
 | `invalid_arguments` tool error | CamelCase, numeric IDs, supported operator/field, limit/offset, valid dates and ordered ranges; no extra sort/filter fields |
 | `upstream_failure` with 401/403 | Credential validity or permissions. Only 401 allows one authentication replay; 403 does not trigger refresh loops. Live header compatibility remains unverified |
@@ -189,6 +181,7 @@ Run one phase at a time. If a phase is partly implemented, continue that phase i
 | [Status](docs/development/STATUS.md) | Progress and cross-session handoff |
 | [Tool contracts](docs/tool-contracts.md) | Exact inputs, outputs, query mapping, and accounting limitations |
 | [HTTP infrastructure](docs/http-infrastructure.md) | Authentication, external configuration, request restrictions, timeout/retry budgets, and test seams |
+| [Linux Secret Service](docs/linux-secret-service.md) | GNOME Keyring lookup, provisioning, cancellation and isolated tests |
 | [Delivery](docs/delivery.md) | Artifact layout, CI decision, locked dependencies and local pipeline |
 | [Integration tests](docs/integration-tests.md) | Real executable, loopback fake API, cancellation, capture and cleanup |
 | [MCP runtime](docs/mcp-runtime.md) | Tool registration, schemas, errors, host lifecycle and logging |

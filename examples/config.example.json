@@ -1,0 +1,9 @@
+{
+  "EBoekhouden": {
+    "Source": "McpLocal",
+    "Keyring": {
+      "Application": "EBoekhoudenMcp",
+      "Account": "api"
+    }
+  }
+}

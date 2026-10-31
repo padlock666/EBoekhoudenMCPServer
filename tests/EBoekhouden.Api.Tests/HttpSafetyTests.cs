@@ -153,12 +153,16 @@ public sealed class HttpSafetyTests
         var services = new ServiceCollection().AddEBoekhoudenApi(configuration);
         Assert.Throws<InvalidOperationException>(() => services.AddEBoekhoudenApi(configuration));
         using var provider = services.BuildServiceProvider();
-        using var client = provider.GetRequiredService<IHttpClientFactory>().CreateClient(ApiServiceCollectionExtensions.ReadClientName);
+        // Unknown options now fail closed instead of being silently ignored.
+        Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IHttpClientFactory>().CreateClient(ApiServiceCollectionExtensions.ReadClientName));
+        using var normal = new ServiceCollection().AddEBoekhoudenApi(HttpHarness.Configuration()).BuildServiceProvider();
+        using var client = normal.GetRequiredService<IHttpClientFactory>().CreateClient(ApiServiceCollectionExtensions.ReadClientName);
         Assert.Equal("https://api.e-boekhouden.nl/", client.BaseAddress!.AbsoluteUri);
     }
 
     [Theory]
-    [InlineData("AccessToken", " ")]
+    [InlineData("Keyring:Application", " ")]
+    [InlineData("Keyring:Account", "")]
     [InlineData("Source", "")]
     [InlineData("Source", "longerthan10")]
     [InlineData("Source", "bad-source")]

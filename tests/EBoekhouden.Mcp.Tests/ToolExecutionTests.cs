@@ -136,8 +136,8 @@ public sealed class ToolExecutionTests
         var text = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
         var error = JsonDocument.Parse(text).RootElement;
         Assert.Equal(403, error.GetProperty("status").GetInt32());
-        Assert.Equal("EXAMPLE_001", error.GetProperty("code").GetString());
-        Assert.Equal("TRACE-123", error.GetProperty("traceId").GetString());
+        Assert.Equal(JsonValueKind.Null, error.GetProperty("code").ValueKind);
+        Assert.Equal(JsonValueKind.Null, error.GetProperty("traceId").ValueKind);
         Assert.DoesNotContain("synthetic-secret", text);
         Assert.False(error.TryGetProperty("items", out _));
     }

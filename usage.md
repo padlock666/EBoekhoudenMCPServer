@@ -2,7 +2,7 @@
 
 First follow [configuration.md](configuration.md) to publish the server and connect it to your MCP client or Codex plugin. This guide describes the implemented tools. All names, IDs, dates and results below are invented examples; replace them with values returned by your administration.
 
-The server reads accounting data using one configured API credential. It exposes exactly ten tools. It cannot create, change or delete accounting records, switch administrations, fetch PDF links, or run arbitrary HTTP requests. Internal session creation happens automatically.
+The server reads accounting data using one API key retrieved from GNOME Keyring. It exposes exactly ten tools. It cannot create, change or delete accounting records, switch administrations, fetch PDF links, or run arbitrary HTTP requests. Internal session creation happens automatically.
 
 ## Start with discovery
 
@@ -134,7 +134,7 @@ Successful calls provide structured content and a text block containing matching
 | HTTP 401/403 | Verify credential/permissions. Only 401 permits one session refresh/replay; 403 does not refresh. |
 | Timeout, network or circuit failure | Work is bounded: default operation deadline 30 seconds, at most three GET attempts including authentication replay. Avoid adding unbounded client retry loops. |
 
-Messages are static and metadata is sanitized; raw bodies and secrets are discarded. Oversized or broken diagnostic bodies may leave code/traceId null while retaining HTTP status. Null diagnostics do not mean success.
+Messages are static and HTTP status is retained. Upstream code/traceId are always null to prevent reflection of a released keyring credential. Raw bodies and secrets are discarded. Null diagnostics do not mean success.
 
 To cancel a remote call, the client must send MCP `notifications/cancelled` with that request’s ID. Canceling only a local SDK task did not reliably forward cancellation in testing. Closing stdin stops this single-session host and cancels pending work. See [runtime behavior](docs/mcp-runtime.md) and [review limitations](docs/development/REVIEW.md).
 

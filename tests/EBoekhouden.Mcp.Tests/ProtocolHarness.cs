@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.IO.Pipelines;
 using System.Net;
 using EBoekhouden.Api;
+using EBoekhouden.Api.Authentication;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Client;
@@ -31,8 +32,9 @@ internal sealed class ProtocolHarness : IAsyncDisposable
         _shutdown.CancelAfter(TimeSpan.FromSeconds(20));
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddSingleton<IPasswordSource, SyntheticPasswordSource>();
         services.AddEBoekhoudenApiForTesting(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        { ["EBoekhouden:AccessToken"] = "synthetic-api-credential", ["EBoekhouden:Source"] = "Tests" }).Build(), new Uri("http://127.0.0.1:12345/"));
+        { ["EBoekhouden:Source"] = "Tests" }).Build(), new Uri("http://127.0.0.1:12345/"));
         services.AddHttpClient(ApiServiceCollectionExtensions.SessionClientName).ConfigurePrimaryHttpMessageHandler(() => new Handler((_, _) =>
         {
             Interlocked.Increment(ref _sessions);
@@ -93,5 +95,14 @@ internal sealed class ProtocolHarness : IAsyncDisposable
     private sealed class Handler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => send(request, cancellationToken);
+    }
+}
+
+internal sealed class SyntheticPasswordSource : IPasswordSource
+{
+    public ValueTask<Password> GetAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(Password.FromUtf8("synthetic-api-credential"u8));
     }
 }

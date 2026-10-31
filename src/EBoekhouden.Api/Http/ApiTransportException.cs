@@ -10,6 +10,7 @@ public enum TransportFailure
     Timeout,
     CircuitOpen,
     RequestRejected,
+    CredentialUnavailable,
 }
 
 // No upstream messages, inner exceptions, response bodies, URIs, or credentials.

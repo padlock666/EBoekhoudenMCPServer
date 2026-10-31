@@ -1,7 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <UserSecretsId>EBoekhoudenMcp.Host.Stdio-83bf70f6-3715-4ca8-9691-16bd407fb162</UserSecretsId>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../EBoekhouden.Mcp/EBoekhouden.Mcp.csproj" />

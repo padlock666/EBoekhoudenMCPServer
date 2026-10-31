@@ -79,9 +79,9 @@ public sealed class EBoekhoudenReadClient(ReadTransport transport, IOptions<EBoe
             linked.Token.ThrowIfCancellationRequested();
             if (!response.IsSuccessStatusCode)
             {
-                var metadata = await ErrorMetadata.ReadAsync(response, _settings.AccessToken, linked.Token).ConfigureAwait(false);
+                // The keyring credential has been released; discard potentially reflected metadata.
                 linked.Token.ThrowIfCancellationRequested();
-                throw ApiException.Http(response.StatusCode, metadata);
+                throw ApiException.Http(response.StatusCode);
             }
             if (response.StatusCode != HttpStatusCode.OK) throw ApiException.InvalidResponse(response.StatusCode);
             try

@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -19,24 +21,33 @@ internal sealed class FakeUpstream : IAsyncDisposable
     internal const string SessionPrefix = "synthetic-session-secret-";
     internal const string PrivateData = "synthetic-private-financial-data";
     private readonly WebApplication _app;
+    private X509Certificate2? _certificate;
     private readonly CancellationTokenSource _shutdown = new();
     private readonly ConcurrentQueue<Exception> _failures = new();
     private int _sessions;
     internal Uri Origin { get; private set; } = null!;
     internal ConcurrentQueue<SeenRequest> Requests { get; } = new();
     internal int Sessions => Volatile.Read(ref _sessions);
+    internal string ExpectedCredential { get; set; } = Credential;
     internal int Reads => Requests.Count(r => r.Method == "GET");
     internal Func<HttpContext, int, CancellationToken, Task<Reply>>? Respond { get; set; }
 
     private FakeUpstream(WebApplication app) => _app = app;
 
-    internal static async Task<FakeUpstream> StartAsync()
+    internal static async Task<FakeUpstream> StartAsync(bool rejectTls = false)
     {
         var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { EnvironmentName = "IntegrationTest", Args = [] });
         builder.Configuration.Sources.Clear();
         builder.Logging.ClearProviders();
-        builder.WebHost.ConfigureKestrel(server => server.Listen(IPAddress.Loopback, 0));
+        using var key = rejectTls ? RSA.Create(2048) : null;
+        var certificate = key is null ? null : new CertificateRequest("CN=synthetic-untrusted", key, HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1).CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddDays(1));
+        builder.WebHost.ConfigureKestrel(server => server.Listen(IPAddress.Loopback, 0, listen =>
+        {
+            if (certificate is not null) listen.UseHttps(certificate);
+        }));
         var fake = new FakeUpstream(builder.Build());
+        fake._certificate = certificate;
         fake._app.Run(fake.HandleAsync);
         try
         {
@@ -58,7 +69,7 @@ internal sealed class FakeUpstream : IAsyncDisposable
             if (request.Method == "POST" && request.Path == "/v1/session")
             {
                 using var body = await JsonDocument.ParseAsync(request.Body, cancellationToken: token);
-                if (body.RootElement.GetProperty("accessToken").GetString() != Credential ||
+                if (body.RootElement.GetProperty("accessToken").GetString() != ExpectedCredential ||
                     body.RootElement.GetProperty("source").GetString() != "Tests" || request.Headers.Authorization.Count != 0)
                     throw new InvalidDataException("Incorrect synthetic session request.");
                 sessionNumber = Interlocked.Increment(ref _sessions);
@@ -111,7 +122,7 @@ internal sealed class FakeUpstream : IAsyncDisposable
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             await _app.StopAsync(timeout.Token);
         }
-        finally { await _app.DisposeAsync(); _shutdown.Dispose(); }
+        finally { await _app.DisposeAsync(); _certificate?.Dispose(); _shutdown.Dispose(); }
     }
 
     internal sealed record SeenRequest(string Method, string Target, string Authorization);

@@ -6,7 +6,7 @@ The server runs as a child process over **stdio**. It serves one configured e-Bo
 
 ## 1. Build and publish
 
-Install the stable .NET SDK **10.0.113**, pinned by [global.json](global.json). Tests also require the .NET 10 ASP.NET Core shared runtime included in the verified SDK installation. Running the published server requires the .NET 10 `Microsoft.NETCore.App` runtime. Linux x64 with runtime **10.0.13** has been tested; Windows/macOS setup has not been verified.
+Install the stable .NET SDK **10.0.114**, pinned by [global.json](global.json). Tests also require the .NET 10 ASP.NET Core shared runtime included in the verified SDK installation. Running the published server requires the .NET 10 `Microsoft.NETCore.App` runtime. The credential lookup requires Linux and GNOME Keyring. Current Linux x64 checks use runtime **10.0.14**. Native test prerequisites are listed in [Linux Secret Service](docs/linux-secret-service.md#verification).
 
 From the repository root:
 
@@ -23,70 +23,108 @@ The result is `artifacts/publish/stdio/EBoekhouden.Host.Stdio.dll`. Keep the ent
 
 `bash scripts/verify.sh` runs the same restore/build/test/publish sequence and tests the published host with synthetic loopback infrastructure. It recreates the generated publish directory. See [delivery.md](docs/delivery.md).
 
-## 2. Supply credentials
+## 2. Configure GNOME Keyring
 
-| Setting | Environment variable | Requirement |
-| --- | --- | --- |
-| AccessToken | `EBoekhouden__AccessToken` | Your e-Boekhouden API credential; required, non-whitespace |
-| Source | `EBoekhouden__Source` | Integration identifier, 1–10 characters matching `^[\w_ ]{1,10}$`; for example `McpLocal` |
+The API key is retrieved through GNOME's libsecret library, using the `application` and `account` attributes. Run the server as your normal desktop user in the same Linux login session as GNOME Keyring. The MCP client must inherit that session's `DBUS_SESSION_BUS_ADDRESS`. A desktop unlock dialog may appear during the first accounting call.
 
-### Option A: environment variables
+### Install the prerequisites
 
-Supply these through the process environment or your client’s secret manager. For a Bash terminal:
+On Ubuntu, Zorin OS or Debian:
 
 ```sh
-export EBoekhouden__AccessToken="<API_TOKEN>"
-export EBoekhouden__Source="McpLocal"
+sudo apt update
+sudo apt install gnome-keyring libpam-gnome-keyring libsecret-1-0 libsecret-tools seahorse
 ```
 
-A desktop application may not inherit variables exported in a separate terminal. Configure its launch environment or use development user secrets below. The server does not automatically load `.env` files.
+`libsecret-tools` supplies the setup command `secret-tool`; the server calls libsecret directly. Native GLib/GIO/libsecret libraries must match the .NET process architecture. After installing desktop integration, log out and back in with your normal password.
 
-### Option B: .NET development user secrets
+Open **Passwords and Keys** (`seahorse`). Create a password-protected keyring if needed, set the intended keyring as the default, and unlock it. For automatic unlock, the Login keyring password should match your login password and GNOME Keyring PAM integration must be enabled. Automatic or fingerprint login may leave it locked; unlock it manually in that case.
 
-From the repository root, using the OS account that will run the server:
+### Add the API key with secret-tool
+
+Run this command in a terminal inside your desktop session, as your normal user:
 
 ```sh
-dotnet user-secrets set --project src/EBoekhouden.Host.Stdio EBoekhouden:AccessToken "<API_TOKEN>"
-dotnet user-secrets set --project src/EBoekhouden.Host.Stdio EBoekhouden:Source "McpLocal"
+secret-tool store --label='e-Boekhouden MCP API key' \
+  application EBoekhoudenMcp account api
 ```
 
-Launch the published server with `DOTNET_ENVIRONMENT=Development`. Its compiled UserSecretsId connects it to that store even when launched outside the source directory. Environment variables override user secrets; use one credential source deliberately to avoid stale overrides. Secret-provider loading has been tested with an isolated synthetic store.
+Paste your **e-Boekhouden API key** at the hidden `Password:` prompt and press Enter. Enter the API key itself, without quotes or JSON. The `--label` value is a display name; lookup uses the exact, case-sensitive attribute values `EBoekhoudenMcp` and `api`. Keep that pair unique across your keyrings. Store the key interactively so it does not appear in command arguments or shell history.
 
-User secrets are a development convenience: they store values in a JSON file outside the repository and **do not encrypt them**. A literal credential in client JSON/TOML or a shell profile is also stored as text. Protect those files with OS permissions and keep real values out of version control and shell history. The placeholder commands above show configuration syntax, not a secure secret-entry mechanism.
+The command stores the item in the default keyring. A matching item in that collection is updated when you repeat it, so the same command can rotate the key. The server retrieves it again when the next session authenticates; an existing cached session continues until refresh. Restarting the server forces a fresh authentication on the next accounting call.
 
-The server keeps the configured API credential in process memory and sends it only in the internal HTTPS `POST /v1/session` body. Short-lived session tokens are cached in memory and refreshed automatically. The server does not write either token to a database or its own credential file, and does not log them. Rotate the external credential and restart the server to apply a change. One credential does not provide tool-level isolation between people sharing the same process.
+### Create the nonsecret configuration
+
+Copy [examples/config.example.json](examples/config.example.json) to `~/.config/eboekhouden-mcp/config.json`:
+
+```sh
+mkdir -p "$HOME/.config/eboekhouden-mcp"
+cp examples/config.example.json "$HOME/.config/eboekhouden-mcp/config.json"
+```
+
+Its contents are:
+
+```json
+{
+  "EBoekhouden": {
+    "Source": "McpLocal",
+    "Keyring": {
+      "Application": "EBoekhoudenMcp",
+      "Account": "api"
+    }
+  }
+}
+```
+
+`Source` is the upstream integration identifier: 1–10 characters matching `^[\w_ ]{1,10}$`. `Keyring.Application` and `Keyring.Account` are nonsecret lookup attributes. Their defaults are shown above, so the `Keyring` object can be omitted when using those values. Custom values must be nonblank, contain no control characters, and be at most 4,096 characters each. Change them in both the store command and configuration to select a different item:
+
+```sh
+secret-tool store --label='e-Boekhouden MCP work API key' \
+  application EBoekhoudenMcp account work
+```
+
+Set `Keyring.Account` to `work` for that item. Lookup searches across the user's keyrings; libsecret may select one if multiple items match. Attribute names and values are metadata, not access controls.
+
+Launch with the **absolute** configuration path:
+
+```sh
+dotnet /ABSOLUTE/PATH/TO/EBoekhouden.Host.Stdio.dll --config /ABSOLUTE/PATH/TO/config.json
+```
+
+The configuration contains only nonsecret settings. It is loaded only when explicitly selected with `--config`, without a file watcher. Environment and launch arguments can override nonsecret settings, for example `EBoekhouden__Keyring__Account` and `EBoekhouden__Source`. Changes to settings require a process restart. Startup validates configuration locally; initialization and tool discovery do not retrieve the key or contact the accounting API.
+
+The key is retrieved only for an internal HTTPS `POST /v1/session`, after connection/TLS validation, then its owned buffers are cleared. Session tokens are cached in memory and refreshed automatically. A missing/unavailable key, missing native libraries or a failed lookup gives a safe `CredentialUnavailable` tool error. Lookup cancellation and unlock prompts share `SessionTimeout` and `OperationTimeout`; increase these within their supported bounds if you need longer to unlock the keyring.
+
+See [Linux Secret Service](docs/linux-secret-service.md) for native implementation details and isolated tests.
 
 ## 3. Connect directly to Codex
 
-For a local Codex client, add the following to `~/.codex/config.toml`, merging it with existing settings. This example forwards the credential from the environment instead of writing its value into TOML:
+For a local Codex client, add the following to `~/.codex/config.toml`, merging it with existing settings. Replace both paths with absolute paths on your machine:
 
 ```toml
 [mcp_servers.eboekhouden]
 command = "/ABSOLUTE/PATH/TO/dotnet"
-args = ["/ABSOLUTE/PATH/TO/EBoekhoudenMCPServer/artifacts/publish/stdio/EBoekhouden.Host.Stdio.dll"]
-env_vars = ["EBoekhouden__AccessToken"]
+args = ["/ABSOLUTE/PATH/TO/EBoekhoudenMCPServer/artifacts/publish/stdio/EBoekhouden.Host.Stdio.dll", "--config", "/ABSOLUTE/PATH/TO/config.json"]
+env_vars = ["DBUS_SESSION_BUS_ADDRESS"]
 startup_timeout_sec = 10
 tool_timeout_sec = 60
-
-[mcp_servers.eboekhouden.env]
-EBoekhouden__Source = "McpLocal"
 ```
 
-For user secrets, replace `env_vars` with no entry and set `DOTNET_ENVIRONMENT = "Development"` inside the `.env` table. Remove credential environment overrides if you want the secret store to supply both required settings.
+The client must run in the same desktop user/session as GNOME Keyring. The `env_vars` entry forwards its `DBUS_SESSION_BUS_ADDRESS` to the child process. The `command`/`args` format follows the [official Codex MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli). Restart the client after changing registration.
 
-Alternatively, register the user-secret variant through the CLI:
+Alternatively, register the same server through the CLI:
 
 ```sh
-codex mcp add eboekhouden --env DOTNET_ENVIRONMENT=Development -- /ABSOLUTE/PATH/TO/dotnet /ABSOLUTE/PATH/TO/EBoekhoudenMCPServer/artifacts/publish/stdio/EBoekhouden.Host.Stdio.dll
+codex mcp add eboekhouden -- /ABSOLUTE/PATH/TO/dotnet /ABSOLUTE/PATH/TO/EBoekhoudenMCPServer/artifacts/publish/stdio/EBoekhouden.Host.Stdio.dll --config /ABSOLUTE/PATH/TO/config.json
 ```
 
-Choose either registration method for the same name. The command writes local client configuration; it does not create an e-Boekhouden session by itself. Check registration with `codex mcp list`, restart the client, and use `/mcp` in the Codex TUI to inspect the active server. Registration is not proof that authentication to the accounting service succeeds. These settings follow the [official Codex MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli); CLI syntax was also checked against the installed client’s help.
+After CLI registration, add `env_vars = ["DBUS_SESSION_BUS_ADDRESS"]` to its generated `[mcp_servers.eboekhouden]` table. Choose either registration method for the same name. The command writes local client configuration; it does not create an e-Boekhouden session by itself. Check registration with `codex mcp list`, restart the client, and use `/mcp` in the Codex TUI to inspect the active server. Registration is not proof that authentication to the accounting service succeeds. These settings follow the [official Codex MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli); CLI syntax was also checked against the installed client’s help.
 
 There is no MCP OAuth login in this executable. `codex mcp login` and HTTP bearer-token client settings do not configure its upstream API credential.
 
 ## 4. Package it as a local ChatGPT/Codex desktop plugin
 
-For a plugin entry in a supported local desktop client, prepare this directory outside tracked secret files:
+For a plugin entry in a supported local desktop client, prepare this directory outside the repository:
 
 ```text
 eboekhouden/
@@ -98,7 +136,7 @@ eboekhouden/
     ...all remaining published files...
 ```
 
-Copy the complete published output into `server/`. The following Linux example uses the same user-secret store as step 2; it contains no API key.
+Copy the complete published output into `server/`. The following Linux example uses the nonsecret configuration above and GNOME Keyring in the desktop session.
 
 `plugin.json`:
 
@@ -131,16 +169,15 @@ Copy the complete published output into `server/`. The following Linux example u
 }
 ```
 
-`server/start.sh` (replace the absolute dotnet path):
+`server/start.sh` (replace both absolute paths):
 
 ```sh
 #!/bin/sh
 set -eu
-export DOTNET_ENVIRONMENT=Development
-exec "/ABSOLUTE/PATH/TO/dotnet" "$(dirname -- "$0")/EBoekhouden.Host.Stdio.dll"
+exec "/ABSOLUTE/PATH/TO/dotnet" "$(dirname -- "$0")/EBoekhouden.Host.Stdio.dll" --config "/ABSOLUTE/PATH/TO/config.json"
 ```
 
-The wrapper must produce no stdout except the server protocol. `${PLUGIN_ROOT}` is expanded by the plugin host; the shell resolves the DLL beside the wrapper. Keep the credential in the external user-secret store on the machine running the plugin.
+The wrapper must produce no stdout except the server protocol. `${PLUGIN_ROOT}` is expanded by the plugin host; the shell resolves the DLL beside the wrapper. Keep the nonsecret configuration on the machine running the plugin. Launch the desktop client in the same login session as GNOME Keyring.
 
 For a personal marketplace, put this folder at `~/.codex/plugins/eboekhouden`. Merge this entry into `~/.agents/plugins/marketplace.json`, preserving other plugins:
 
@@ -164,21 +201,20 @@ This recipe packages the local executable. A browser/cloud custom-MCP URL form c
 
 ## 5. Other stdio MCP clients
 
-Clients using a `mcpServers` JSON format can adapt this user-secret example:
+Clients using a `mcpServers` JSON format can adapt this example:
 
 ```json
 {
   "mcpServers": {
     "eboekhouden": {
       "command": "/ABSOLUTE/PATH/TO/dotnet",
-      "args": ["/ABSOLUTE/PATH/TO/EBoekhoudenMCPServer/artifacts/publish/stdio/EBoekhouden.Host.Stdio.dll"],
-      "env": { "DOTNET_ENVIRONMENT": "Development" }
+      "args": ["/ABSOLUTE/PATH/TO/EBoekhoudenMCPServer/artifacts/publish/stdio/EBoekhouden.Host.Stdio.dll", "--config", "/ABSOLUTE/PATH/TO/config.json"]
     }
   }
 }
 ```
 
-Client formats differ. Use that client’s stdio launch settings; JSON Windows paths need escaped backslashes. A client must read stdout as MCP and capture diagnostics separately from stderr.
+Client formats differ. Use that client’s Linux stdio launch settings and preserve the desktop session bus. A client must read stdout as MCP and capture diagnostics separately from stderr.
 
 ## Optional runtime settings
 
@@ -205,9 +241,10 @@ Start with tool discovery: ask the client to list this server’s tools. Discove
 
 | Symptom | Action |
 | --- | --- |
-| Exit 1 with a static stderr message | Check the required settings, source length/pattern, duration formats and test-origin overrides. The message deliberately omits configuration values. |
+| Exit 1 with a static stderr message | Check the absolute `--config` path, valid JSON, keyring attribute values, Source length/pattern, duration formats and test-origin overrides. The message deliberately omits configuration values. |
+| CredentialUnavailable | Check libsecret installation, the same desktop user/session, exact application/account attributes and unlock status in Passwords and Keys. |
 | Missing SDK/runtime or assembly | Check the exact SDK for builds, .NET 10 runtime for execution, absolute paths and complete publish directory. |
-| Credential missing in a desktop client | Check its launch environment or Development/user-secret setup under the same OS account; restart after changes. |
+| Keyring unavailable in a desktop client | Preserve DBUS_SESSION_BUS_ADDRESS from the desktop login session and run as the same user. Check busctl --user status org.freedesktop.secrets. |
 | Tools missing in Codex | Check registration, plugin enabled state, duplicate registrations and client restart. Check stderr separately. |
 | HTTP 401/403 on an accounting call | Check credential validity and upstream permissions. Live header compatibility is still unverified; do not paste tokens or financial bodies into diagnostics. |
 | Local cancellation leaves a request running | The client must send MCP notifications/cancelled with the matching request ID. The pinned SDK’s local-task forwarding limitation is documented in [REVIEW.md](docs/development/REVIEW.md). |

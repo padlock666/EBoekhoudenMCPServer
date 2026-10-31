@@ -17,22 +17,22 @@ Successful calls return both `structuredContent` and one text block containing t
 Execution failures have `isError=true`, no structured success result and one JSON text block:
 
 ```json
-{"kind":"upstream_failure","message":"<fixed safe message>","status":403,"code":"EXAMPLE_001","traceId":"TRACE-123","transportFailure":null}
+{"kind":"upstream_failure","message":"<fixed safe message>","status":403,"code":null,"traceId":null,"transportFailure":null}
 ```
 
-`kind` is `invalid_arguments`, `upstream_failure`, `invalid_response` or `internal_error`. Diagnostic fields may be null. Upstream status/code/trace come from the API layer's sanitizer; raw bodies, query values and arbitrary exception messages never escape. API authentication/transport/response failures remain errors, including 404 and malformed successful responses. An actual empty page is a normal success.
+`kind` is `invalid_arguments`, `upstream_failure`, `invalid_response` or `internal_error`. Upstream status is retained; code/traceId are null because the keyring credential has already been released and cannot be used to filter reflected values. Raw bodies, query values and arbitrary exception messages never escape. API authentication/transport/response failures remain errors, including 404 and malformed successful responses. An actual empty page is a normal success.
 
 Cancellation tokens flow from the SDK handler through the tool and typed HTTP stack. Requested cancellation is rethrown for SDK protocol handling; it is not an empty page or generic failure. Tests verify an explicit `notifications/cancelled` message with a known request ID, not merely a locally canceled client task. See the [compatibility note](development/API_COMPATIBILITY.md#phase-5-mcp-compatibility-findings) about client-side forwarding observed during testing.
 
 ## Host lifecycle and diagnostics
 
-Use the [README client example](../README.md#mcp-client-configuration) and [external options setup](http-infrastructure.md). Normal environment and development user-secret providers supply configuration. Validation occurs at startup without HTTP; malformed binding or missing options produce exit 1 with a static stderr message. Tokens are obtained only for a valid accounting call. `StdioDisconnectService` observes the SDK transport reader completion and stops Generic Host on EOF or transport failure, canceling pending HTTP operations. This avoids SDK 2.3.0 waiting for in-flight handlers before its single-session service stops the host. Generic Host also handles termination signals and has a ten-second shutdown timeout; the pending-call EOF integration test requires normal exit within five seconds.
+Use the [README client example](../README.md#mcp-client-configuration) and [external options setup](http-infrastructure.md). Nonsecret JSON, environment and launch settings configure the GNOME Keyring attributes and HTTP limits. Validation occurs at startup without HTTP; malformed binding or missing options produce exit 1 with a static stderr message. Tokens are obtained only for a valid accounting call. `StdioDisconnectService` observes the SDK transport reader completion and stops Generic Host on EOF or transport failure, canceling pending HTTP operations. This avoids SDK 2.3.0 waiting for in-flight handlers before its single-session service stops the host. Generic Host also handles termination signals and has a ten-second shutdown timeout; the pending-call EOF integration test requires normal exit within five seconds.
 
 All console logging is forced to stderr even if configuration requests another threshold. The host blocks `ModelContextProtocol` logs because SDK Trace can include financial arguments/results. It also blocks Generic Host internal startup exception logging because binding errors can include configuration values; the entry point emits a static diagnostic instead. HTTP factory logging remains disabled. The host neither configures telemetry exporters nor writes startup banners to stdout.
 
 ## Verification and version references
 
-Offline tests exercise all ten tools and eleven underlying routes through the official SDK client, with real API/authentication infrastructure and synthetic fake primary handlers. They verify exact requests, typed mappings, structured/text equality, safe failures, validation before network, raw duplicate arguments, cancellation notifications, actual schemas, lazy Generic Host startup and shutdown, and protected logger settings. The [phase 6 subprocess suite](integration-tests.md) additionally uses the actual executable and real loopback HTTP with synthetic fixtures, including expiry/refresh races, cancellation and cleanup.
+Offline tests exercise all ten tools and eleven underlying routes through the official SDK client, with real API/authentication infrastructure, an injected synthetic password source and fake HTTP primary handlers. They verify exact requests, typed mappings, structured/text equality, safe failures, validation before network, raw duplicate arguments, cancellation notifications, actual schemas, lazy Generic Host startup and shutdown, and protected logger settings. The [phase 6 subprocess suite](integration-tests.md) additionally uses the actual executable and real loopback HTTP with synthetic fixtures, including expiry/refresh races, cancellation and cleanup.
 
 The implementation was checked against tagged official SDK documentation/source:
 
@@ -42,4 +42,4 @@ The implementation was checked against tagged official SDK documentation/source:
 - [DelegatingMcpServerTool](https://github.com/modelcontextprotocol/csharp-sdk/blob/v2.3.0/src/ModelContextProtocol.Core/Server/DelegatingMcpServerTool.cs)
 - [Explicit primitive collection in DI](https://github.com/modelcontextprotocol/csharp-sdk/blob/v2.3.0/src/ModelContextProtocol/McpServerOptionsSetup.cs)
 
-Phase 7 verifies the same executable integration suite against the local published DLL, including initialization, fake accounting calls, user secrets and startup errors; see [delivery](delivery.md). See [STATUS.md](development/STATUS.md) for executed commands, counts and limitations. No live API compatibility, deployment or publication is implied.
+Phase 7 verifies the same executable integration suite against the local published DLL, including initialization, fake accounting calls, GNOME Keyring retrieval and startup errors; see [delivery](delivery.md). See [STATUS.md](development/STATUS.md) for executed commands, counts and limitations. No live API compatibility, deployment or publication is implied.

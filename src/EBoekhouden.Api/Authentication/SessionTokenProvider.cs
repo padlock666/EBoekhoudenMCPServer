@@ -18,7 +18,7 @@ internal sealed class SessionToken(string value, DateTimeOffset refreshAt)
 }
 
 internal sealed partial class SessionTokenProvider(
-    IHttpClientFactory factory, IOptions<EBoekhoudenOptions> options, TimeProvider time) : IDisposable
+    IHttpClientFactory factory, IOptions<EBoekhoudenOptions> options, TimeProvider time, IPasswordSource passwords) : IDisposable
 {
     private readonly EBoekhoudenOptions _settings = options.Value;
     private readonly SemaphoreSlim _refresh = new(1, 1);
@@ -48,9 +48,10 @@ internal sealed partial class SessionTokenProvider(
         using var timeout = new CancellationTokenSource(_settings.SessionTimeout, time);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
         using var client = factory.CreateClient(ApiServiceCollectionExtensions.SessionClientName);
+        using var content = new SessionContent(passwords, _settings.Source, linked.Token);
         using var request = new HttpRequestMessage(HttpMethod.Post, "/v1/session")
         {
-            Content = JsonContent.Create(new SessionRequest(_settings.AccessToken, _settings.Source), options: ApiJson.Options),
+            Content = content,
         };
         var started = time.GetUtcNow();
         HttpStatusCode? receivedStatus = null;
@@ -63,8 +64,8 @@ internal sealed partial class SessionTokenProvider(
             linked.Token.ThrowIfCancellationRequested();
             if (!response.IsSuccessStatusCode)
             {
-                var metadata = await ErrorMetadata.ReadAsync(response, _settings.AccessToken, linked.Token).ConfigureAwait(false);
-                throw new ApiTransportException(TransportFailure.SessionRejected, response.StatusCode, metadata.Code, metadata.TraceId);
+                // The keyring credential has been released; discard potentially reflected metadata.
+                throw new ApiTransportException(TransportFailure.SessionRejected, response.StatusCode);
             }
             var session = await response.Content.ReadFromJsonAsync<SessionResponse>(ApiJson.Options, linked.Token).ConfigureAwait(false);
             linked.Token.ThrowIfCancellationRequested();
@@ -81,7 +82,9 @@ internal sealed partial class SessionTokenProvider(
         catch (HttpRequestException)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            throw new ApiTransportException(timeout.IsCancellationRequested ? TransportFailure.Timeout : TransportFailure.Network);
+            if (timeout.IsCancellationRequested) throw new ApiTransportException(TransportFailure.Timeout);
+            if (content.Failure is ApiTransportException failure) throw failure;
+            throw new ApiTransportException(TransportFailure.Network);
         }
         catch (JsonException) { throw new ApiTransportException(TransportFailure.InvalidSession, receivedStatus); }
     }
@@ -90,12 +93,6 @@ internal sealed partial class SessionTokenProvider(
 
     [GeneratedRegex(@"\A[A-Za-z0-9\-._~+/]+=*\z", RegexOptions.CultureInvariant)]
     private static partial Regex BearerToken();
-
-    private sealed class SessionRequest(string accessToken, string source)
-    {
-        public string AccessToken { get; } = accessToken;
-        public string Source { get; } = source;
-    }
 
     private sealed class SessionResponse
     {

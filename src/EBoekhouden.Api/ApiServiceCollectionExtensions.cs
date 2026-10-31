@@ -35,9 +35,19 @@ public static class ApiServiceCollectionExtensions
     {
         if (services.Any(s => s.ServiceType == typeof(SessionTokenProvider)))
             throw new InvalidOperationException("Only one e-Boekhouden credential registration is supported.");
-        services.AddOptions<EBoekhoudenOptions>().Bind(configuration.GetSection(EBoekhoudenOptions.SectionName)).ValidateOnStart();
+        services.AddOptions<EBoekhoudenOptions>().Configure(settings =>
+        {
+            var section = configuration.GetSection(EBoekhoudenOptions.SectionName);
+            CredentialConfiguration.Validate(section);
+            section.Bind(settings);
+        }).ValidateOnStart();
         services.AddSingleton<IValidateOptions<EBoekhoudenOptions>, EBoekhoudenOptionsValidator>();
         services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<IPasswordSource>(sp =>
+        {
+            var settings = sp.GetRequiredService<IOptions<EBoekhoudenOptions>>().Value;
+            return new KeyringPasswordSource(settings.Keyring);
+        });
         services.AddSingleton<SessionTokenProvider>();
         services.AddSingleton(sp => new ReadTransport(sp.GetRequiredService<IHttpClientFactory>(),
             sp.GetRequiredService<SessionTokenProvider>(), sp.GetRequiredService<IOptions<EBoekhoudenOptions>>(),

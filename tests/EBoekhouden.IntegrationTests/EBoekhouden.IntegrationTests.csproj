@@ -13,6 +13,7 @@
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="SecretService/*.py" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="../EBoekhouden.Api.Tests/Fixtures/*.json" Link="Fixtures/%(Filename)%(Extension)" />
     <EmbeddedResource Include="../../docs/tool-schemas.json" Link="tool-schemas.json" />
   </ItemGroup>

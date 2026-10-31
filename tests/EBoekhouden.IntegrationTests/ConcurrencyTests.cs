@@ -30,7 +30,7 @@ public sealed class ConcurrencyTests
                 threeReplays.TrySetResult();
             return FakeUpstream.DefaultReply(context.Request, number);
         };
-        await using var host = StdioProcess.Start(api.Origin);
+        await using var host = await StdioProcess.StartAsync(api.Origin);
         await host.ConnectAsync();
         var cold = Enumerable.Range(0, 8).Select(_ => host.CallAsync("get_relation", """{"id":17}""").AsTask()).ToArray();
         await firstSession.Task.WaitAsync(host.Token);
@@ -66,7 +66,7 @@ public sealed class ConcurrencyTests
             if (number == 2) { refreshing.TrySetResult(); await release.Task.WaitAsync(token); return FakeUpstream.Session(2); }
             return FakeUpstream.DefaultReply(context.Request, number);
         };
-        await using var host = StdioProcess.Start(api.Origin);
+        await using var host = await StdioProcess.StartAsync(api.Origin);
         await host.ConnectAsync();
         ExecutableTests.Success(await host.CallAsync("get_relation", """{"id":17}"""));
         // The actual executable uses System time. Unit tests cover boundaries with FakeTimeProvider.
@@ -98,7 +98,7 @@ public sealed class ConcurrencyTests
             }
             return FakeUpstream.DefaultReply(context.Request, number);
         };
-        await using var host = StdioProcess.Start(api.Origin);
+        await using var host = await StdioProcess.StartAsync(api.Origin);
         await host.ConnectAsync();
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(host.Token);
         var call = host.Client.SendRequestAsync(new JsonRpcRequest
@@ -133,7 +133,7 @@ public sealed class ConcurrencyTests
             finally { if (context.RequestAborted.IsCancellationRequested) aborted.TrySetResult(); }
             return new FakeUpstream.Reply(200, "{}");
         };
-        await using var host = StdioProcess.Start(api.Origin);
+        await using var host = await StdioProcess.StartAsync(api.Origin);
         await host.ConnectAsync();
         var call = host.Client.SendRequestAsync(new JsonRpcRequest
         {
@@ -161,7 +161,7 @@ public sealed class ConcurrencyTests
             finally { if (context.RequestAborted.IsCancellationRequested) aborted.TrySetResult(); }
             return new FakeUpstream.Reply(200, "{}");
         };
-        await using var host = StdioProcess.Start(api.Origin);
+        await using var host = await StdioProcess.StartAsync(api.Origin);
         await host.ConnectAsync();
         var call = host.CallAsync("get_relation", """{"id":17}""").AsTask();
         await entered.Task.WaitAsync(host.Token);

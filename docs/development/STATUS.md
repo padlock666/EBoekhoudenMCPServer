@@ -10,7 +10,8 @@ Last updated: 2026-10-31.
 - Phase 2 implements all core read DTOs, separate MCP request/result records, strict contract serialization, typed filters, endpoint query encoding, validation, and explicit mappings. See [tool-contracts.md](../tool-contracts.md).
 - Phase 3 implements lazy single-credential session authentication, separate restricted factory clients, validated configuration/startup hook, shared attempt/concurrency/time budgets and circuit breaking. See [HTTP infrastructure](../http-infrastructure.md).
 - Phase 4 implements IEBoekhoudenReadClient with all eleven typed GET operations, API-boundary response validation, disposal/cancellation and normalized safe errors. See [typed API client](../api-client.md).
-- The independently re-run offline suite contains 465 passing tests: 340 API, 86 MCP and 39 executable/protocol integration cases. All 39 integration cases also pass against the actual local publish. Phase 8 fixed decimal rounding, error-status loss during buffering and schema-conforming mutation type rejection; see [REVIEW.md](REVIEW.md).
+- Current offline suite: **528 passing tests** (365 API, 87 MCP, 76 executable integration), with one optional GNOME test skipped by default. All 76 executable cases also pass against the local publish. The gated real-GNOME case passes separately against both build and publish. Earlier dated phase counts are historical.
+- GNOME Keyring is the sole API-key source, using the GnomeKeyringTest demo's libsecret application/account lookup. See [configuration](../../configuration.md#2-configure-gnome-keyring) and [native implementation](../linux-secret-service.md).
 - The workspace was not a Git repository at initial inspection. Git initialization is not required to begin implementation and has not been performed.
 - No live API behavior has been verified.
 - User guides: [configuration.md](../../configuration.md) covers credentials, Codex registration and a local desktop plugin; [usage.md](../../usage.md) covers all ten tools and accounting limits. Documentation checks are recorded below; client/plugin installation has not been performed.
@@ -27,10 +28,11 @@ Last updated: 2026-10-31.
 | 6. Integration tests | Complete | Actual host/SDK stdio + loopback fake HTTP; 32 integration cases; full offline suite 436 passed; Release build 0 warnings/errors |
 | 7. Delivery and CI | Complete | Six dependency locks; locked restore and clean Release build; 438 offline tests + 34 published-artifact cases pass; shared local/CI pipeline and GitHub Actions configuration |
 | 8. Independent review | Complete for local offline scope | Three confirmed P2 defects fixed; locked restore, clean Release build, 465 offline tests + 39 published-artifact cases pass; remaining SDK/live/hosted/platform limits recorded in REVIEW.md |
+| Follow-up: GNOME Keyring | Complete for local Linux scope | Locked restore/build/publish pass; 528 standard tests, 76 published cases; isolated real-GNOME passes for build and publish |
 
 ## Next action
 
-Review the focused fixes and remaining findings in [REVIEW.md](REVIEW.md), then run the hosted GitHub Actions workflow when available. A minimal read-only live compatibility check requires separate explicit authorization and credentials. Local offline criteria have execution evidence; hosted Actions, other platforms and live API compatibility are not marked verified. No deployment, package publication or Git commits.
+Follow [configuration.md](../../configuration.md#2-configure-gnome-keyring) to provision the API key in the intended desktop session, then register the published DLL with the absolute nonsecret configuration path. Hosted CI, personal client/keyring setup and live e-Boekhouden compatibility remain unverified.
 
 ## Phase 1 validation evidence
 
@@ -104,11 +106,11 @@ Implemented:
 - Per-request Bearer authorization; at most one 401 replay, none for 403. Authentication replay and transient retries share a single GET budget (default 3, configurable 1..5). Fresh request per attempt; discarded responses disposed. Retry-After honored or returned without retry if beyond allowed delay.
 - Overall operation deadline (queue, token waits, session creation, attempts, buffering and backoff), per-attempt and per-session timeouts; shared logical-operation concurrency limit; jittered backoff and generation-safe circuit breaker. Cancellation wins racing network errors and releases resources.
 - Closed ReadRequest factories, innermost method/path/origin guards, fixed production origin, redirects/cookies disabled. Code-only numeric loopback registration for tests, never a configuration flag. Both HTTP factory loggers removed; infrastructure emits no bodies/headers/queries/tokens or console output. Failures use static messages with no raw inner exceptions.
-- Custom IValidateOptions with ValidateOnStart/IStartupValidator validates configuration locally, with lazy tokens. Generic Host composition remains phase 5; the existing executable is unchanged. Host UserSecretsId metadata and placeholder-only setup instructions are provided for later wiring.
+- Custom IValidateOptions with ValidateOnStart/IStartupValidator validates configuration locally, with lazy tokens. Generic Host composition remains phase 5; the existing executable is unchanged.
 
 Packages: Microsoft.Extensions.Http **10.0.13** and Microsoft.Extensions.Options.ConfigurationExtensions **10.0.13** in Api; test-only Microsoft.Extensions.TimeProvider.Testing **10.0.0**. Official factory/options/FakeTimeProvider docs and package metadata were checked; restore and compilation verify these pins. MCP SDK APIs/pins unchanged. The planned Http.Resilience/DataAnnotations additions were replaced with one explicit retry/circuit owner and a custom validator; this keeps the shared auth/transient budget observable and avoids extra retry layers.
 
-Files: Api registration, Configuration/, Authentication/, Http/, Properties/AssemblyInfo.cs; five new API test files with fake handlers/time/log capture; package/project references; host user-secret metadata; [HTTP infrastructure](../http-infrastructure.md), README, architecture, compatibility and status updates. OpenAPI unchanged.
+Files: Api registration, Configuration/, Authentication/, Http/, Properties/AssemblyInfo.cs; five new API test files with fake handlers/time/log capture; package/project references; [HTTP infrastructure](../http-infrastructure.md), README, architecture, compatibility and status updates. OpenAPI unchanged.
 
 Exact successful commands (same writable sandbox CLI/package directories as earlier phases):
 
@@ -138,8 +140,8 @@ Implemented:
 - IEBoekhoudenReadClient / EBoekhoudenReadClient: relation list/detail, invoice list/detail, mutation list/detail, outstanding, ledger list/detail, all balances and single balance. Registered as singleton over existing ReadTransport, with only approved ReadRequest/QueryEncoder routes and required cancellation tokens.
 - Exact search/detail DTO separation, long mutation identities, DateOnly dates, nullable decimal money and optional arrays. No invoice payment inference, invoice/mutation conversion, absent-money zero defaults, PDF fetches or derived totals. Single/all balance scope validation occurs before authentication.
 - Only HTTP 200 typed shapes succeed. API boundary rejects null/malformed/missing/duplicate fields, inconsistent page counts and null nested elements; empty envelopes succeed. Existing duplicate-property JSON checks now also apply upstream. Reviewed optionality against GET schemas and recorded invoice-items prose/required-marker ambiguity.
-- ApiException has fixed safe messages, actual HTTP status, kind, optional sanitized code/trace and transport reason. Error array/dictionary/security shapes, non-JSON/malformed bodies and mismatched body status normalize defensively. Free text/raw bodies/URIs/inner exceptions never escape. Diagnostic inspection/format limits and credential/query echo redaction are documented.
-- Session errors use the same metadata sanitizer and retain available status/code/trace; invalid session payloads retain received status. No retry policy added. Final responses/streams are disposed; the typed-call deadline extends through parsing/validation and preserves caller cancellation.
+- ApiException has fixed safe messages, actual HTTP status, kind, suppressed upstream code/trace and transport reason. Error array/dictionary/security shapes, non-JSON/malformed bodies and mismatched body status normalize defensively. Free text/raw bodies/URIs/inner exceptions never escape. Error-body handling and reflection safety are documented.
+- Session errors retain HTTP status and suppress upstream code/trace; invalid session payloads retain received status. No retry policy added. Final responses/streams are disposed; the typed-call deadline extends through parsing/validation and preserves caller cancellation.
 - Fourteen clearly labeled embedded synthetic JSON fixtures (eleven GET responses plus three error shapes), fixture README and endpoint/validation/error test classes. Tests retain the actual factory/authentication/guards/transport with only fake primary handlers.
 
 Files: new Api Clients/ and Errors/; ApiJson, DI registration, ReadTransport response provenance, session normalization and ApiTransportException metadata updates; API test resources/support/three test classes; [typed client](../api-client.md), README, tool-contract/infrastructure links, architecture, compatibility and status notes. No package, SDK or MCP contract change.
@@ -167,7 +169,7 @@ Implemented:
 - Exactly ten explicit delegates on the approved AccountingTools class, registered as SDK primitives without assembly scanning. Thin validation/invocation/explicit mapping; all eleven GET paths covered. No new upstream filters/routes, mutable tools or session tool.
 - Official MCP SDK 2.3.0 typed creation and structured output, flat strict input adapter, refined generated input/output schemas and read-only/non-destructive/idempotent/open-world annotations. Reviewed [schema snapshot](../tool-schemas.json) is compared with actual SDK client tools/list output. Runtime ordering checks supplement schemas.
 - Success has structured content plus matching JSON text. Validation, API and unexpected execution failures have isError=true and safe JSON text, without a success-shaped structured page. Original raw arguments reject duplicate fields before dictionary binding. Genuine empty upstream pages remain successful.
-- Generic Host composition, startup options validation, external environment/development-secret configuration, lazy authentication, stdio transport, cancellation and bounded shutdown. Console logging forced to stderr; SDK payload logs and Host internal exception logs blocked regardless of configuration. Static entry-point failure diagnostic. Production origin remains fixed.
+- Generic Host composition, startup options validation, external nonsecret configuration, lazy authentication, stdio transport, cancellation and bounded shutdown. Console logging forced to stderr; SDK payload logs and Host internal exception logs blocked regardless of configuration. Static entry-point failure diagnostic. Production origin remains fixed.
 - 46 new offline MCP/host cases (86 MCP total): all tool mappings/exact queries, balances, required/null/type/case/unknown/range/limit validation before any session/GET, raw duplicate arguments, schemas/annotations, output precision/text equality, real empty pages, normalized/malformed/unexpected failures, explicit protocol cancellation, fake-infrastructure Generic Host startup/call/shutdown and protected logger configuration.
 
 Files: Mcp Tools/ and registration extension; HostComposition/Program; MCP test project references/resources plus ProtocolHarness, ToolExecutionTests, ToolSchemaTests and HostTests; [MCP runtime](../mcp-runtime.md), actual schema snapshot, README, tool-contract/infrastructure notes, architecture, compatibility and this status. Existing package pins and OpenAPI unchanged. No placeholder production classes or meaningless discovery tests.
@@ -232,11 +234,11 @@ No phase 6 blocker. Unrun: publishing/CI/locks and published-artifact smoke (pha
 
 Implemented:
 
-- Expanded README with verified SDK/runtime/runner requirements, locked restore/build/test/publish commands, environment/user-secret setup, absolute published-DLL MCP client configuration, all ten tool examples, operators/pagination, accounting/identity/precision limits, safe errors and troubleshooting. Development documentation index preserved; [delivery decisions](../delivery.md) and runtime/integration/architecture/compatibility notes updated.
+- Expanded README with verified SDK/runtime/runner requirements, locked restore/build/test/publish commands, local setup, absolute published-DLL MCP client configuration, all ten tool examples, operators/pagination, accounting/identity/precision limits, safe errors and troubleshooting. Development documentation index preserved; [delivery decisions](../delivery.md) and runtime/integration/architecture/compatibility notes updated.
 - Six SDK-generated packages.lock.json files; RestorePackagesWithLockFile and RestoreLockedMode enabled centrally. Pins unchanged. Intentional updates require explicit unlocked regeneration and lock review.
 - No prior CI configuration was present; documented GitHub Actions/Ubuntu 24.04 before adding .github/workflows/verify.yml. Official checkout v6 and setup-dotnet v5 tag SHAs/metadata verified and pinned; contents-read permission, no persisted checkout credential, SDK from global.json, VSTest and lock-keyed package cache. Shared scripts/verify.sh runs restore/build/tests/local publish and published-artifact tests. No deploy/push/upload step or accounting credential.
 - Local ignored artifact at artifacts/publish/stdio/EBoekhouden.Host.Stdio.dll, framework-dependent, untrimmed, no RID/apphost, no bundled runtime. Runtime configuration requires Microsoft.NETCore.App only; no test assemblies/xUnit in publish output.
-- Integration harness accepts an explicit absolute EBOEKHOUDEN_TEST_HOST_DLL with required companion files, failing instead of falling back. Two new cases prove isolated Development user-secret loading and Production missing-credential stderr behavior. All existing integration cases also run against the exact publish, retaining synthetic loopback API, capture/redaction, cancellation and cleanup.
+- Integration harness accepts an explicit absolute EBOEKHOUDEN_TEST_HOST_DLL with required companion files, failing instead of falling back. All existing integration cases also run against the exact publish, retaining synthetic loopback API, capture/redaction, cancellation and cleanup.
 
 Commands actually executed:
 
@@ -261,7 +263,7 @@ dotnet publish src/EBoekhouden.Host.Stdio/EBoekhouden.Host.Stdio.csproj -c Relea
 EBOEKHOUDEN_TEST_HOST_DLL="$PWD/artifacts/publish/stdio/EBoekhouden.Host.Stdio.dll" dotnet test tests/EBoekhouden.IntegrationTests -c Release --no-build --no-restore -m:1 -nr:false --logger 'console;verbosity=minimal'
 ```
 
-Results: lock generation and final pipeline each exit 0. Final locked restore succeeds; Release build **0 warnings / 0 errors**; full suite **318 API + 86 MCP + 34 integration = 438 passed, 0 failed, 0 skipped**; publish exit 0; **all 34 integration cases pass again against the published DLL**, including initialization, every tool/schema, fake accounting calls, Development secrets and Production configuration errors on stderr/empty stdout. Earlier pipeline with 33 integration cases also passed before the additional Production check. Six lock-file SHA256 values are unchanged by the final locked pipeline. No test failure remains.
+Results: lock generation and final pipeline each exit 0. Final locked restore succeeds; Release build **0 warnings / 0 errors**; full suite **318 API + 86 MCP + 34 integration = 438 passed, 0 failed, 0 skipped**; publish exit 0; **all 34 integration cases pass again against the published DLL**, including initialization, every tool/schema, fake accounting calls and Production configuration errors on stderr/empty stdout. Earlier pipeline with 33 integration cases also passed before the additional Production check. Six lock-file SHA256 values are unchanged by the final locked pipeline. No test failure remains.
 
 Additional checks: bash syntax passes; workflow YAML parsed with PyYAML 6.0.1 and checked for event names, read-only permissions, Ubuntu runner, full action SHAs and the shared entry point. All ten README argument examples validate against reviewed SDK schemas using the existing /tmp jsonschema 4.23.0 audit installation. A /tmp-only copied graph with Microsoft.Extensions.Http changed from 10.0.13 to 10.0.12 failed locked restore as expected (exit 1, NU1004); the repository pin/locks were untouched. Audit metadata was disabled only for that isolated negative control; normal pipeline audit settings were retained. git check-ignore confirms the publish DLL is ignored. No integration scratch/isolated secret directories remain.
 
@@ -323,17 +325,37 @@ Outcomes:
 
 Network/local-socket permission was granted for public NuGet metadata and VSTest/loopback checks; no current blocker for executed checks. No live API, deployment, package push or Git commit. Hosted Actions, Windows/macOS, IPv6 listener and OS-signal checks remain unrun. SDK client local-task cancellation alone remains an interoperability limitation; explicit notifications abort upstream HTTP. Live Bearer/token format/expiry, response completeness and identifier-width assumptions remain unverified. Full severities, impacts and file references are in [REVIEW.md](REVIEW.md). Phase 8 completes the local offline review, not blanket release certification across unrun environments.
 
-## Configuration and usage documentation — 2026-10-31
+## GNOME Keyring handoff — 2026-10-31
 
-Added root configuration.md and usage.md, linked near the top of README and in its existing documentation index. Configuration covers the pinned SDK/publish, external credentials and plaintext user-secret storage, Codex MCP TOML/CLI setup, a local desktop plugin manifest/MCP/wrapper/personal-marketplace recipe, optional runtime settings, and troubleshooting. Usage documents all ten tools with synthetic arguments, prompts, filters, pagination, balances, precision/identity limits, errors and cancellation. Public/remote HTTP hosting is not implied by the local plugin recipe.
+Implemented:
 
-Sources: actual options/host/contracts and official OpenAI MCP/plugin/desktop-only documentation fetched on 2026-10-31. Installed Codex CLI 0.162.0-alpha.17.2 help verified mcp add/get and plugin add/marketplace syntax. No actual API key, client profile or plugin installation was changed.
+- Adapted `KeyringPassword` and the fixed-ABI SafeHandle wrapper from `/home/jimmy/Documents/Projects/GnomeKeyringTest/` without changing that project. Production registers only `KeyringPasswordSource`; its application/account attributes default to `EBoekhoudenMcp` / `api`.
+- Lookup runs on a worker with native cancellation and owned-memory cleanup. Session content remains deferred until after connection/TLS setup, one-shot and buffer-clearing. Cached sessions, synchronized refresh, bounded retries and fixed read-only routes are retained. Upstream error code/trace are suppressed to prevent reflection of the released key.
+- Configuration contains only nonsecret settings; an absolute `--config` selects JSON. README, configuration, examples, architecture, HTTP/API/runtime, compatibility, integration and delivery documentation describe the current implementation. The setup guide includes interactive `secret-tool store`, exact matching attributes, prerequisites, desktop unlock, custom accounts and rotation.
+- Executable tests use the real adapter with owned synthetic Secret Services/private buses. An optional real-GNOME test uses its own daemon, bus and HOME/XDG directories and provisions with `secret-tool store`. No personal keyring or live API is used.
 
-Validation performed:
+Exact final commands (writable CLI/package caches in this sandbox):
 
-- Python stdlib json/tomllib parsing and /bin/sh -n: all 16 fenced JSON/TOML/shell blocks parse. These are documentation syntax checks, not plugin installation evidence.
-- In a disposable /tmp directory, set CODEX_HOME to the directory containing the documented TOML and run codex mcp get eboekhouden --json: exit 0; parsed command, credential env_vars and Source match the example. No process/server connection was started. CLI help emitted a read-only PATH-alias warning; configuration inspection still succeeded.
-- Ten usage table argument examples match the exact reviewed tool names, permitted top-level fields and required fields in docs/tool-schemas.json. This structural check is not full JSON Schema evaluation; the optional Python jsonschema package is unavailable in this session.
-- Local README/guide file links resolve; git diff --check passes. Shell wrapper and JSON remain placeholder-only examples.
+```sh
+export DOTNET_CLI_HOME=/tmp/eboekhouden-dotnet
+export NUGET_PACKAGES=/tmp/eboekhouden-nuget
+bash scripts/verify.sh > /tmp/eboekhouden-keyring-verify.log 2>&1
+EBOEKHOUDEN_TEST_REAL_GNOME=1 dotnet test tests/EBoekhouden.IntegrationTests -c Release --no-build --no-restore -m:1 -nr:false --filter FullyQualifiedName~IsolatedGnomeTests --logger 'console;verbosity=minimal'
+EBOEKHOUDEN_TEST_REAL_GNOME=1 EBOEKHOUDEN_TEST_HOST_DLL="$PWD/artifacts/publish/stdio/EBoekhouden.Host.Stdio.dll" dotnet test tests/EBoekhouden.IntegrationTests -c Release --no-build --no-restore -m:1 -nr:false --filter FullyQualifiedName~IsolatedGnomeTests --logger 'console;verbosity=minimal'
+git diff --check
+git diff --exit-code -- Directory.Packages.props global.json ':(glob)**/packages.lock.json' docs/tool-schemas.json e-boekhouden-api-v1.yaml
+sha256sum e-boekhouden-api-v1.yaml
+```
 
-No runtime source changes; build/full offline suite/publish were not rerun for this documentation-only update. The 465-test/39-artifact results above remain dated prior evidence, not a new run. Codex server connection, desktop plugin installation, live accounting compatibility and hosted CI remain unverified. Next action remains reviewing changes and running hosted CI when available; follow the new guides for local client setup, with live accounting checks requiring separate authorization.
+Outcomes:
+
+- Shared pipeline exit 0: locked restore succeeds; Release build **0 warnings / 0 errors**; **365 API + 87 MCP + 76 integration = 528 standard tests pass**. Local framework-dependent publish succeeds; **76 integration cases pass again against the published DLL**. The one optional real-GNOME test is skipped in each standard run and is not counted as passing there.
+- Both explicit real-GNOME commands exit 0: **1 case passes, 0 failures/skips**, separately against build and published host. Provisioning uses the installed `secret-tool` on the test's private bus; no desktop keyring is inherited.
+- JSON/TOML/shell syntax checks pass for **14 JSON, 1 TOML and 14 shell fences** in the user/native guides, plus the example JSON. Local documentation files and heading anchors resolve. A disposable `/tmp` Codex profile is inspected with `codex mcp get eboekhouden --json` (exit 0), confirming the launch arguments and `DBUS_SESSION_BUS_ADDRESS` allowlist; no server connection or personal client registration is made.
+- Repository searches find no setup/documentation references to the superseded credential implementations. Central pins, six locks, reviewed tool schemas and OpenAPI are unchanged. OpenAPI SHA256 remains `b883304a41219a15395fde37110db3a6ea3c0d82a467e7c4123abb0e04b72ca9`. Whitespace checks pass.
+
+Environment: Linux x64, SDK 10.0.114/runtime 10.0.14; libsecret/tools 0.21.4-1build3, GLib/GIO 2.80.0-6ubuntu3.10, dbus 1.14.10-4ubuntu4.1, GNOME Keyring 46.1-2ubuntu0.2, Python GI 3.48.2-1. Existing installed libraries/tools were used. Official GNOME lookup/freeing and secret-tool documentation, the MCP SDK 2.3.0 guide, and official OpenAI MCP environment forwarding documentation were rechecked. CI now installs the fake-service native prerequisites before its shared pipeline; hosted execution was not run here.
+
+Resolved execution issues: the initial sandbox test invocation aborted because VSTest local sockets were denied; socket-capable execution passed. The first gated GNOME attempt raced daemon startup; an explicit bounded D-Bus name readiness wait fixed the fixture, and both final gated runs pass. No remaining execution blocker.
+
+Limits: live authentication, deferred/chunked body compatibility, desktop unlock UI, hosted CI, other native versions/architectures and personal client/keyring setup are unverified. No real credential entry, financial data, live accounting request, deployment, package publication, package/plugin installation or Git commit occurred. Next concrete action is operator keyring setup using the documented `secret-tool store` command and client registration; live API checks require separate authorization.

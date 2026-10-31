@@ -1,5 +1,6 @@
 using System.IO.Pipelines;
 using EBoekhouden.Api;
+using EBoekhouden.Api.Authentication;
 using EBoekhouden.Host.Stdio;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,13 +18,21 @@ namespace EBoekhouden.Mcp.Tests;
 public sealed class HostTests
 {
     [Fact]
+    public void DuplicateCredentialJsonFieldsAreRejected()
+    {
+        using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes("""{"EBoekhouden":{"Keyring":{"Account":"api","Account":"api"}}}"""));
+        Assert.Throws<FormatException>(() => new ConfigurationBuilder().AddJsonStream(stream).Build());
+    }
+
+    [Fact]
     public async Task GenericHostStartsLazilyRunsToolsWithFakeHttpAndStops()
     {
         var input = new Pipe();
         var output = new Pipe();
         var builder = HostComposition.CreateBuilder([]);
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-        { ["EBoekhouden:AccessToken"] = "synthetic-credential", ["EBoekhouden:Source"] = "Tests" });
+        { ["EBoekhouden:Source"] = "Tests" });
+        builder.Services.AddSingleton<IPasswordSource, SyntheticPasswordSource>();
         builder.Services.RemoveAll<ITransport>();
         builder.Services.AddSingleton<ITransport>(new StreamServerTransport(input.Reader.AsStream(), output.Writer.AsStream()));
         var sends = 0;
@@ -59,7 +68,7 @@ public sealed class HostTests
         var builder = HostComposition.CreateBuilder([]);
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["EBoekhouden:AccessToken"] = "", ["EBoekhouden:Source"] = "",
+            ["EBoekhouden:Source"] = "",
             ["Logging:LogLevel:Default"] = "Trace", ["Logging:LogLevel:ModelContextProtocol"] = "Trace",
             ["Logging:Console:LogToStandardErrorThreshold"] = "None",
         });

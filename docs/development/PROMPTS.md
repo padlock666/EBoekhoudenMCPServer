@@ -122,7 +122,7 @@ Enforce an exact method/route/origin allowlist before dispatch and disable
 redirects. No user-supplied URL or path. Keep test overrides explicit.
 
 Validate configuration at startup without network access; obtain tokens
-lazily. Credentials come from environment variables or user secrets.
+lazily. Retrieve the API key from GNOME Keyring using libsecret with application/account attributes; configuration contains only nonsecret settings.
 Do not log secrets, bodies, or sensitive query values.
 
 Use fake handlers and controllable time to test reuse, concurrent refresh,

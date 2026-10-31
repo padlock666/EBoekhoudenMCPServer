@@ -5,6 +5,7 @@ using System.Text.Json;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using Xunit;
+using EBoekhouden.IntegrationTests.SecretService;
 
 namespace EBoekhouden.IntegrationTests;
 
@@ -12,6 +13,7 @@ namespace EBoekhouden.IntegrationTests;
 internal sealed class StdioProcess : IAsyncDisposable
 {
     private readonly Process _process;
+    private PrivateSecretService? _secretService;
     private readonly Pipe _protocol = new(new PipeOptions(pauseWriterThreshold: long.MaxValue));
     private readonly MemoryStream _stdout = new();
     private readonly MemoryStream _stderr = new();
@@ -28,7 +30,7 @@ internal sealed class StdioProcess : IAsyncDisposable
     internal int Id => _process.Id;
     internal int ExitCode => _process.ExitCode;
 
-    private StdioProcess(Uri origin, IReadOnlyDictionary<string, string?>? environment)
+    private StdioProcess(Uri origin, IReadOnlyDictionary<string, string?>? environment, IReadOnlyList<string>? arguments)
     {
         var hostDll = Environment.GetEnvironmentVariable("EBOEKHOUDEN_TEST_HOST_DLL")
             ?? Path.Combine(AppContext.BaseDirectory, "StdioHost", "EBoekhouden.Host.Stdio.dll");
@@ -46,6 +48,8 @@ internal sealed class StdioProcess : IAsyncDisposable
             CreateNoWindow = true,
         };
         start.ArgumentList.Add(hostDll);
+        if (arguments is not null)
+            foreach (var argument in arguments) start.ArgumentList.Add(argument);
         // Do not inherit user credentials, secrets providers, proxies, or logging configuration.
         start.Environment.Clear();
         foreach (var key in new[] { "PATH", "SystemRoot", "DOTNET_ROOT", "DOTNET_ROOT_X64", "DOTNET_ROOT_ARM64", "TMP", "TEMP", "TMPDIR" })
@@ -54,7 +58,6 @@ internal sealed class StdioProcess : IAsyncDisposable
         start.Environment["DOTNET_NOLOGO"] = "1";
         start.Environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1";
         start.Environment["EBoekhoudenTest__UpstreamOrigin"] = origin.AbsoluteUri;
-        start.Environment["EBoekhouden__AccessToken"] = FakeUpstream.Credential;
         start.Environment["EBoekhouden__Source"] = "Tests";
         start.Environment["Logging__LogLevel__Default"] = "Trace";
         start.Environment["Logging__LogLevel__ModelContextProtocol"] = "Trace";
@@ -73,7 +76,23 @@ internal sealed class StdioProcess : IAsyncDisposable
         _errPump = PumpAsync(_process.StandardError.BaseStream, _stderr, false);
     }
 
-    internal static StdioProcess Start(Uri origin, IReadOnlyDictionary<string, string?>? environment = null) => new(origin, environment);
+    internal static async Task<StdioProcess> StartAsync(Uri origin, IReadOnlyDictionary<string, string?>? environment = null,
+        IReadOnlyList<string>? arguments = null)
+    {
+        PrivateSecretService? service = null;
+        try
+        {
+            var values = new Dictionary<string, string?>();
+            if (environment is null || !environment.ContainsKey("DBUS_SESSION_BUS_ADDRESS"))
+            {
+                service = await PrivateSecretService.StartAsync();
+                foreach (var pair in service.Environment) values[pair.Key] = pair.Value;
+            }
+            if (environment is not null) foreach (var pair in environment) values[pair.Key] = pair.Value;
+            return new StdioProcess(origin, values, arguments) { _secretService = service };
+        }
+        catch { if (service is not null) await service.DisposeAsync(); throw; }
+    }
 
     internal async Task ConnectAsync(string protocolVersion = "2025-11-25")
     {
@@ -159,6 +178,7 @@ internal sealed class StdioProcess : IAsyncDisposable
                 await _protocol.Reader.CompleteAsync();
                 _process.Dispose(); _input.Dispose(); _stdout.Dispose(); _stderr.Dispose(); _deadline.Dispose();
                 Directory.Delete(_directory, true);
+                if (_secretService is not null) await _secretService.DisposeAsync();
             }
         }
     }

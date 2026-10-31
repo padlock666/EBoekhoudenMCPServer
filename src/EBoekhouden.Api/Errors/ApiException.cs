@@ -29,7 +29,7 @@ public sealed class ApiException : Exception
         TransportFailure = transportFailure;
     }
 
-    internal static ApiException Http(HttpStatusCode status, ErrorMetadata metadata) =>
+    internal static ApiException Http(HttpStatusCode status) =>
         new(ApiErrorKind.Http, status switch
         {
             HttpStatusCode.NotFound => "The requested e-Boekhouden resource was not found.",
@@ -39,7 +39,7 @@ public sealed class ApiException : Exception
             >= HttpStatusCode.InternalServerError => "e-Boekhouden is temporarily unavailable.",
             >= HttpStatusCode.MultipleChoices and < HttpStatusCode.BadRequest => "e-Boekhouden returned an unexpected redirect.",
             _ => "The e-Boekhouden request failed.",
-        }, status, metadata.Code, metadata.TraceId);
+        }, status);
 
     internal static ApiException InvalidResponse(HttpStatusCode status) =>
         new(ApiErrorKind.InvalidResponse, "e-Boekhouden returned an invalid response.", status);

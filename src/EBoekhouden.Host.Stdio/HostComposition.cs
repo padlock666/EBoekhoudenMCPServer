@@ -13,6 +13,7 @@ public static class HostComposition
     public static HostApplicationBuilder CreateBuilder(string[] args)
     {
         var builder = Microsoft.Extensions.Hosting.Host.CreateApplicationBuilder(args);
+        FileConfiguration.Add(builder.Configuration, args);
         builder.Logging.ClearProviders();
         builder.Logging.AddConsole(options =>
         {

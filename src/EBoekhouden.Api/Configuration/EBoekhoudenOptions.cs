@@ -3,11 +3,11 @@ using Microsoft.Extensions.Options;
 
 namespace EBoekhouden.Api.Configuration;
 
-// A class rather than a record: generated ToString must never print the credential.
+// Options contain only nonsecret settings; the API credential lives in GNOME Keyring.
 public sealed class EBoekhoudenOptions
 {
     public const string SectionName = "EBoekhouden";
-    public string AccessToken { get; set; } = "";
+    public KeyringOptions Keyring { get; set; } = new();
     public string Source { get; set; } = "";
     public TimeSpan SessionTimeout { get; set; } = TimeSpan.FromSeconds(10);
     public TimeSpan AttemptTimeout { get; set; } = TimeSpan.FromSeconds(10);
@@ -26,7 +26,8 @@ internal sealed partial class EBoekhoudenOptionsValidator : IValidateOptions<EBo
     public ValidateOptionsResult Validate(string? name, EBoekhoudenOptions options)
     {
         var failures = new List<string>();
-        if (string.IsNullOrWhiteSpace(options.AccessToken)) failures.Add("EBoekhouden:AccessToken is required.");
+        if (options.Keyring is null || !ValidAttribute(options.Keyring.Application) || !ValidAttribute(options.Keyring.Account))
+            failures.Add("Keyring application and account must be nonblank and contain no control characters (maximum 4096 characters).");
         if (options.Source is null || !SourcePattern().IsMatch(options.Source))
             failures.Add("EBoekhouden:Source must match the documented 1..10 character pattern.");
         CheckDuration(options.SessionTimeout, TimeSpan.FromMinutes(2), "SessionTimeout", failures);
@@ -44,6 +45,9 @@ internal sealed partial class EBoekhoudenOptionsValidator : IValidateOptions<EBo
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
     }
 
+    private static bool ValidAttribute(string? value) =>
+        !string.IsNullOrWhiteSpace(value) && value.Length <= 4096 && !value.Any(char.IsControl);
+
     private static void CheckDuration(TimeSpan value, TimeSpan max, string name, List<string> failures)
     {
         if (value <= TimeSpan.Zero || value > max) failures.Add(name + " is outside the supported positive duration range.");
@@ -51,4 +55,10 @@ internal sealed partial class EBoekhoudenOptionsValidator : IValidateOptions<EBo
 
     [GeneratedRegex(@"\A[\w_ ]{1,10}\z", RegexOptions.CultureInvariant)]
     private static partial Regex SourcePattern();
+}
+
+public sealed class KeyringOptions
+{
+    public string Application { get; set; } = "EBoekhoudenMcp";
+    public string Account { get; set; } = "api";
 }

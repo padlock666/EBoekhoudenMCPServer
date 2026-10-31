@@ -30,5 +30,7 @@ jobs:
           global-json-file: global.json
           cache: true
           cache-dependency-path: '**/packages.lock.json'
+      - name: Install isolated keyring test prerequisites
+        run: sudo apt-get update && sudo apt-get install -y libsecret-1-0 dbus python3-gi gir1.2-glib-2.0
       - name: Restore, build, test, publish and verify published host
         run: bash scripts/verify.sh

@@ -87,7 +87,11 @@ Runner guidance: [xUnit VSTest/MTP documentation](https://xunit.net/docs/getting
 
 Use `ILogger<T>` initially. All stdio diagnostics must use stderr. OpenTelemetry is optional for later deployment; exporters must not corrupt stdout or expose financial data.
 
-Credentials come from environment variables or development user secrets. Nonsecret settings may live in appsettings. Validate source constraints, credential presence, timeouts, and origins at startup without making a network call. Acquire sessions lazily.
+The API credential comes exclusively from GNOME Keyring using libsecret's application/account lookup, adapted from the GnomeKeyringTest demo. `KeyringOptions` contains only the nonsecret attributes (defaults: `EBoekhoudenMcp` / `api`). `Source`, attributes and HTTP limits are validated at startup without retrieving a key or making a network call. The host supports an explicit absolute `--config` path for nonsecret JSON settings; environment/CLI can override those settings. See [configuration](../../configuration.md).
+
+`IPasswordSource` is the asynchronous test/composition boundary; production registers only `KeyringPasswordSource`. A worker runs `secret_password_lookupv_nonpageable_sync` with a null schema and a GLib-owned attribute table. `GCancellable` handles cancellation, and SafeHandles release the native password with `secret_password_free`. Lookup searches across collections and can prompt to unlock; keep the application/account pair unique. No provider-identity or duplicate-selection guarantee is added to libsecret's semantics.
+
+One-shot session content retrieves after connection/TLS validation and releases its owned UTF-8/JSON buffers after use. Each new session POST retrieves afresh; GETs reuse the existing session cache and refresh coordination. Errors suppress upstream code/trace because the API key has already been released. No managed package dependency was added. See [native design and tests](../linux-secret-service.md).
 
 ## Core tool mapping
 
@@ -168,7 +172,7 @@ Enforce exact approved methods, routes, and origin immediately before dispatch. 
 
 See [HTTP infrastructure](../http-infrastructure.md) for exact registration, external configuration, defaults, limits, circuit policy, request allowlist, timeout ownership, and test seams. Production uses two named factory clients with redirects/cookies disabled and all HTTP factory loggers removed. Session POSTs have no retry policy; one shared read loop owns the complete GET attempt budget, including one optional 401 replay. Default budget is three GET attempts and a 30-second operation deadline including queue/token waits, buffering and backoff. Token refresh uses a cancellation-aware lock and atomic lease-identity invalidation.
 
-The planned Http.Resilience/DataAnnotations dependencies were replaced by this explicit bounded policy and IValidateOptions validator to avoid multiple retry owners and keep configuration validation local. Production origin is fixed; the alternate API test registration accepts numeric loopback origins only. The executable selects it only in explicit IntegrationTest configuration with a validated test origin; all other environment/override combinations fail closed. ValidateOnStart is registered and tested both through IStartupValidator and actual Generic Host startup. Development user-secret metadata is present in the host project, with setup instructions in the infrastructure document.
+The planned Http.Resilience/DataAnnotations dependencies were replaced by this explicit bounded policy and IValidateOptions validator to avoid multiple retry owners and keep configuration validation local. Production origin is fixed; the alternate API test registration accepts numeric loopback origins only. The executable selects it only in explicit IntegrationTest configuration with a validated test origin; all other environment/override combinations fail closed. ValidateOnStart is registered and tested both through IStartupValidator and actual Generic Host startup. The API key is retrieved from GNOME Keyring using the configured application/account attributes.
 
 ### Implemented phase 4 client
 
@@ -176,13 +180,13 @@ The planned Http.Resilience/DataAnnotations dependencies were replaced by this e
 
 Only HTTP 200 typed responses succeed. A 404 is an error, an empty list envelope succeeds, and malformed/missing/ambiguous data fails. Unknown/additive fields are tolerated, but duplicate JSON properties are rejected. Optional values remain null. Every final response/stream is disposed. A linked typed-call deadline extends the transport budget through JSON parsing; caller cancellation stays cancellation.
 
-ApiException uses fixed local messages, actual HTTP status and optional bounded/sanitized code/trace metadata. Error title/message/errors text and raw inner exceptions are discarded. Session errors use the same sanitizer; no extra retry layer was added. Phase 5 translates ApiException into safe `isError=true` tool results explicitly.
+ApiException uses fixed local messages, actual HTTP status and suppressed upstream code/trace metadata. Error title/message/errors text and raw inner exceptions are discarded. Session errors use the same metadata suppression; no extra retry layer was added. Phase 5 translates ApiException into safe `isError=true` tool results explicitly.
 
 ## MCP behavior
 
 `AccountingToolCatalog` explicitly registers ten delegates from the approved `AccountingTools` class; no assembly scanning is used. Each has typed contracts, descriptions, read-only/non-destructive/idempotent/open-world annotations and a reviewed output schema. [Actual schemas](../tool-schemas.json) are compared with `tools/list` in tests. Protocol formatting and errors remain in the MCP layer; see [MCP runtime](../mcp-runtime.md).
 
-Return structured results plus compatible text content as supported by the SDK. Invalid input must not reach the upstream service. API failures must not look like successful empty pages. Preserve useful error codes/status/trace IDs, while sanitizing potentially sensitive messages.
+Return structured results plus compatible text content as supported by the SDK. Invalid input must not reach the upstream service. API failures must not look like successful empty pages. Preserve HTTP status and fixed safe failure messages; suppress upstream code/trace IDs to prevent reflection of the released keyring credential.
 
 Descriptions, notes, and other upstream free text are data, never instructions for the server or caller.
 
@@ -196,7 +200,7 @@ The stdio host now observes ITransport.MessageReader.Completion through StdioDis
 
 Phase 7 selects GitHub Actions on Ubuntu 24.04 because no existing provider configuration was present. Full-SHA-pinned official checkout/setup actions run the shared `scripts/verify.sh` pipeline: locked restore, Release build, full offline tests, framework-dependent DLL publish to ignored artifacts/publish/stdio, and the same executable integration suite against that exact output. There is no deployment, package push or accounting secret in CI. See [delivery](../delivery.md) for the decision, dependency update procedure, primary references and unverified platforms/hosted-run scope.
 
-The artifact is untrimmed and RID-independent, with UseAppHost=false and no bundled runtime. It is launched through dotnet with an absolute published DLL path. The test harness's explicit EBOEKHOUDEN_TEST_HOST_DLL override validates the absolute DLL and companion dependency/runtime files before process creation; it does not affect production configuration or request restrictions. Isolated synthetic user-secret and Production missing-credential checks run against build and published artifacts. All package pins and API/MCP business contracts remain unchanged.
+The artifact is untrimmed and RID-independent, with UseAppHost=false and no bundled runtime. It is launched through dotnet with an absolute published DLL path. The test harness's explicit EBOEKHOUDEN_TEST_HOST_DLL override validates the absolute DLL and companion dependency/runtime files before process creation; it does not affect production configuration or request restrictions. Isolated keyring and invalid-configuration checks run against build and published artifacts. All package pins and API/MCP business contracts remain unchanged.
 
 ## References
 
