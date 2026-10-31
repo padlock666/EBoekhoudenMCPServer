@@ -4,6 +4,8 @@ A C#/.NET 10 stdio server exposing **ten read-only accounting tools** through th
 
 Release build, offline tests and a local framework-dependent publish are verified on Linux x64. The published DLL is tested through the official MCP client against a loopback fake API. **Live e-Boekhouden compatibility remains unverified**, including the specification's conflicting authorization-header prose and response completeness; see [compatibility notes](docs/development/API_COMPATIBILITY.md). No deployment or package publication is implied.
 
+Start with [configuration.md](configuration.md) for credentials, runtime settings, Codex MCP registration and a local ChatGPT/Codex desktop plugin. Read [usage.md](usage.md) for all ten tools, example arguments, pagination, balances and errors.
+
 ## Prerequisites
 
 - Build/test: stable .NET SDK **10.0.113**, pinned exactly by `global.json` with prereleases and roll-forward disabled. The SDK installation must include the .NET 10 ASP.NET Core shared runtime for the test-only Kestrel fake API.
@@ -176,6 +178,8 @@ Run one phase at a time. If a phase is partly implemented, continue that phase i
 
 | Document | Purpose |
 | --- | --- |
+| [Configuration](configuration.md) | Setup, secret storage, runtime options, Codex registration and desktop plugin packaging |
+| [Usage](usage.md) | Tool examples, filters, pagination, financial interpretation and troubleshooting |
 | [AGENTS.md](AGENTS.md) | Durable instructions for coding assistants |
 | [Implementation plan](docs/development/IMPLEMENTATION_PLAN.md) | Scope, sequence, acceptance criteria, model suggestions |
 | [Architecture](docs/development/ARCHITECTURE.md) | Project structure, dependencies, tool interface, runtime behavior |

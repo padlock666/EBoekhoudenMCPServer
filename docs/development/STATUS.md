@@ -1,6 +1,6 @@
 # Development status and handoff
 
-Last updated: 2026-10-30.
+Last updated: 2026-10-31.
 
 ## Current state
 
@@ -13,6 +13,7 @@ Last updated: 2026-10-30.
 - The independently re-run offline suite contains 465 passing tests: 340 API, 86 MCP and 39 executable/protocol integration cases. All 39 integration cases also pass against the actual local publish. Phase 8 fixed decimal rounding, error-status loss during buffering and schema-conforming mutation type rejection; see [REVIEW.md](REVIEW.md).
 - The workspace was not a Git repository at initial inspection. Git initialization is not required to begin implementation and has not been performed.
 - No live API behavior has been verified.
+- User guides: [configuration.md](../../configuration.md) covers credentials, Codex registration and a local desktop plugin; [usage.md](../../usage.md) covers all ten tools and accounting limits. Documentation checks are recorded below; client/plugin installation has not been performed.
 
 ## Phase tracking
 
@@ -321,3 +322,18 @@ Outcomes:
 - OpenAPI SHA256 unchanged: b883304a41219a15395fde37110db3a6ea3c0d82a467e7c4123abb0e04b72ca9. Final whitespace/document link/lock/publish checks pass.
 
 Network/local-socket permission was granted for public NuGet metadata and VSTest/loopback checks; no current blocker for executed checks. No live API, deployment, package push or Git commit. Hosted Actions, Windows/macOS, IPv6 listener and OS-signal checks remain unrun. SDK client local-task cancellation alone remains an interoperability limitation; explicit notifications abort upstream HTTP. Live Bearer/token format/expiry, response completeness and identifier-width assumptions remain unverified. Full severities, impacts and file references are in [REVIEW.md](REVIEW.md). Phase 8 completes the local offline review, not blanket release certification across unrun environments.
+
+## Configuration and usage documentation — 2026-10-31
+
+Added root configuration.md and usage.md, linked near the top of README and in its existing documentation index. Configuration covers the pinned SDK/publish, external credentials and plaintext user-secret storage, Codex MCP TOML/CLI setup, a local desktop plugin manifest/MCP/wrapper/personal-marketplace recipe, optional runtime settings, and troubleshooting. Usage documents all ten tools with synthetic arguments, prompts, filters, pagination, balances, precision/identity limits, errors and cancellation. Public/remote HTTP hosting is not implied by the local plugin recipe.
+
+Sources: actual options/host/contracts and official OpenAI MCP/plugin/desktop-only documentation fetched on 2026-10-31. Installed Codex CLI 0.162.0-alpha.17.2 help verified mcp add/get and plugin add/marketplace syntax. No actual API key, client profile or plugin installation was changed.
+
+Validation performed:
+
+- Python stdlib json/tomllib parsing and /bin/sh -n: all 16 fenced JSON/TOML/shell blocks parse. These are documentation syntax checks, not plugin installation evidence.
+- In a disposable /tmp directory, set CODEX_HOME to the directory containing the documented TOML and run codex mcp get eboekhouden --json: exit 0; parsed command, credential env_vars and Source match the example. No process/server connection was started. CLI help emitted a read-only PATH-alias warning; configuration inspection still succeeded.
+- Ten usage table argument examples match the exact reviewed tool names, permitted top-level fields and required fields in docs/tool-schemas.json. This structural check is not full JSON Schema evaluation; the optional Python jsonschema package is unavailable in this session.
+- Local README/guide file links resolve; git diff --check passes. Shell wrapper and JSON remain placeholder-only examples.
+
+No runtime source changes; build/full offline suite/publish were not rerun for this documentation-only update. The 465-test/39-artifact results above remain dated prior evidence, not a new run. Codex server connection, desktop plugin installation, live accounting compatibility and hosted CI remain unverified. Next action remains reviewing changes and running hosted CI when available; follow the new guides for local client setup, with live accounting checks requiring separate authorization.
